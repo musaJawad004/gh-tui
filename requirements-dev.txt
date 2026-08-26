@@ -1,0 +1,7 @@
+# Dev/test dependencies for gh-tui. Install with:  pip install -r requirements-dev.txt
+
+-r requirements.txt
+
+textual-dev>=1.6   # `textual console` devtools
+pytest>=8          # test runner
+ruff>=0.6          # formatter + linter

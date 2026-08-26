@@ -1,0 +1,66 @@
+# Project metadata + dependencies for gh-tui.
+# Layout: flat `src/` (no nested package folder). Modules/packages live directly under src/.
+# NOTE: dependency versions are minimums; pin exactly when implementation starts.
+
+[project]
+name = "gh-tui"
+version = "0.0.0"
+description = "Your entire GitHub + Git + CI/CD workflow, in one terminal UI. Built in Python."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Muhammad Musa" }]
+keywords = ["tui", "github", "git", "ci", "cd", "terminal", "textual"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Version Control :: Git",
+    "Topic :: Utilities",
+]
+
+dependencies = [
+    "textual>=0.80",   # TUI framework (Bubble Tea analog)
+    "rich>=13",        # rendering primitives (used by textual; listed for clarity)
+    "pygit2>=1.15",    # fast local git reads via libgit2 (ships macOS/Linux wheels)
+    "pyyaml>=6",       # config loading
+    "httpx>=0.27",     # async HTTP for direct GitHub API calls later
+]
+
+[project.optional-dependencies]
+dev = [
+    "textual-dev>=1.6",  # devtools console (`textual console`)
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/musaJawad004/gh-tui"
+Repository = "https://github.com/musaJawad004/gh-tui"
+Issues = "https://github.com/musaJawad004/gh-tui/issues"
+
+# Run in dev with:  python src/            (executes src/__main__.py)
+# Installed script:
+[project.scripts]
+gh-tui = "app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Map everything under src/ to the wheel root, so `app`, `core`, `models`, ... are importable.
+# (Provisional — revisit packaging when we get to distribution in v0.4.)
+[tool.hatch.build.targets.wheel]
+sources = ["src"]
+only-include = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

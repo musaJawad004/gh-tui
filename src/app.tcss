@@ -1,0 +1,21 @@
+/* gh-tui — app-wide stylesheet (Textual CSS).
+ *
+ * Structure/layout only. Colors come from theme tokens ($primary, $surface, $success,
+ * $diff-add, $row-selected, ...) defined in src/themes/. NEVER hardcode a hex here —
+ * reference a token so all themes work.
+ *
+ * Stub — no rules defined yet.
+ *
+ * TODO (fill when we code):
+ *   Screen            { layout: vertical; }
+ *   TabBar            { dock: top; }
+ *   StatusBar         { dock: bottom; }
+ *   #main             { layout: horizontal; }          left list | right detail
+ *   PrTable           { width: 1fr; }
+ *   DetailPane        { width: 1fr; background: $panel; }
+ *   PrTable > .row--selected { background: $row-selected; }
+ *   .ci--pass         { color: $success; }
+ *   .ci--fail         { color: $error; }
+ *   .diff--add        { color: $diff-add; }
+ *   .diff--remove     { color: $diff-remove; }
+ */
