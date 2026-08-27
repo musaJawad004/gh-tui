@@ -18,7 +18,7 @@ from textual.widgets import Static
 
 from themes.palettes import active_colors
 from widgets.spinner import indeterminate_bar, inline_loader
-from widgets.terminal_charts import donut_chart, line_plot
+from widgets.terminal_charts import contribution_calendar, donut_chart, line_plot
 
 
 def _grid(*ratios: int, padding: tuple[int, int] = (0, 1)) -> Table:
@@ -194,7 +194,12 @@ class OverviewScreen(Screen):
             )
             yield DashboardPanel(
                 "commit activity",
-                self._home_chart((4, 7, 3, 9, 12, 8, 14), "57 commits  ·  main ↑2", "warning"),
+                contribution_calendar(
+                    "57 commits  ·  main ↑2",
+                    self._c("warning"),
+                    width=34,
+                    height=11,
+                ),
                 id="commit-chart",
                 classes="dashboard-panel",
             )
@@ -209,9 +214,11 @@ class OverviewScreen(Screen):
         self._refresh_frame = 0
         self._refresh_timer = None
         self._apply_breakpoints(self.size.width, self.size.height)
+        self.call_after_refresh(self._render_analytics)
 
     def on_resize(self, event: Resize) -> None:
         self._apply_breakpoints(event.size.width, event.size.height)
+        self.call_after_refresh(self._render_analytics)
 
     def _apply_breakpoints(self, width: int, height: int) -> None:
         states = {
@@ -368,7 +375,7 @@ class OverviewScreen(Screen):
         return result
 
     def _home_chart(self, values: tuple[int, ...], summary: str, color: str) -> Text:
-        return line_plot(values, summary, self._c(color), width=28, height=5)
+        return line_plot(values, summary, self._c(color), width=28, height=5, legend="daily rate")
 
     def _home_donut(self, values: tuple[int, ...], summary: str) -> Text:
         return donut_chart(
@@ -377,6 +384,53 @@ class OverviewScreen(Screen):
             (self._c("primary"), self._c("success"), self._c("warning")),
             width=25,
             height=7,
+            labels=("open", "completed", "blocked"),
+        )
+
+    def _render_analytics(self) -> None:
+        """Fit every chart to the live panel instead of centering a fixed-size drawing."""
+        if not self.is_mounted or self.has_class("compact"):
+            return
+        success = self.query_one("#success-chart", DashboardPanel).query_one(Static)
+        state = self.query_one("#state-chart", DashboardPanel).query_one(Static)
+        commits = self.query_one("#commit-chart", DashboardPanel).query_one(Static)
+        if min(success.size.width, state.size.width, commits.size.width) <= 0:
+            return
+
+        plot_width = max(24, success.size.width - 8)
+        plot_height = max(5, success.size.height - 4)
+        success.update(
+            line_plot(
+                (91, 86, 94, 88, 96, 91, 95),
+                "95%  ·  22 / 23 passing",
+                self._c("success"),
+                width=plot_width,
+                height=plot_height,
+                legend="workflow success",
+            )
+        )
+
+        donut_height = max(7, state.size.height - 2)
+        if donut_height % 2 == 0:
+            donut_height -= 1
+        donut_width = min(state.size.width - 2, donut_height * 2 + 1)
+        state.update(
+            donut_chart(
+                (11, 42, 7),
+                "60 tracked items",
+                (self._c("primary"), self._c("success"), self._c("warning")),
+                width=donut_width,
+                height=donut_height,
+                labels=("open", "completed", "blocked"),
+            )
+        )
+        commits.update(
+            contribution_calendar(
+                "57 commits  ·  main ↑2",
+                self._c("warning"),
+                width=max(28, commits.size.width - 2),
+                height=max(9, commits.size.height),
+            )
         )
 
     def _command_line(self) -> Table:

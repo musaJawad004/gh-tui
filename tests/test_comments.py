@@ -5,7 +5,7 @@ import asyncio
 from rich.console import Console
 
 from app import GhTuiApp
-from widgets.terminal_charts import donut_chart, line_plot
+from widgets.terminal_charts import contribution_calendar, donut_chart, line_plot
 
 
 def test_pr_and_issue_comment_editors_are_focusable_and_keep_separate_drafts(tmp_path):
@@ -34,12 +34,12 @@ def test_pr_and_issue_comment_editors_are_focusable_and_keep_separate_drafts(tmp
             await pilot.press("escape")
             await pilot.press("1")
             await pilot.pause(0.7)
-            assert editor.text == "hello@musa "
+            assert editor.text == "hello@musa"
 
         restored = GhTuiApp(start_screen="workspace", drafts_path=tmp_path / "drafts.yml")
         async with restored.run_test(size=(140, 40)) as pilot:
             await pilot.pause()
-            assert restored.screen.query_one("#comment-editor").text == "hello@musa "
+            assert restored.screen.query_one("#comment-editor").text == "hello@musa"
 
     asyncio.run(run())
 
@@ -58,6 +58,25 @@ def test_terminal_charts_have_real_axes_and_multiple_rows():
     assert line_output.count("\n") >= 8
     assert "25" in donut_output
     assert donut_output.count("●") >= 15
+
+    console.print(contribution_calendar("57 commits", "yellow", width=60, height=16))
+    calendar_output = console.export_text(clear=True)
+    assert "Mon" in calendar_output
+    assert "Sun" in calendar_output
+    assert "Less" in calendar_output
+    assert "More" in calendar_output
+
+
+def test_mention_shortcut_replaces_partial_mention_without_trailing_space(tmp_path):
+    async def run() -> None:
+        app = GhTuiApp(start_screen="workspace", drafts_path=tmp_path / "drafts.yml")
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.press("e", "@", "d", "l", "ctrl+m")
+            editor = app.screen.query_one("#comment-editor")
+            assert editor.text == "@dlvhdr"
+            assert not editor.text.endswith(" ")
+
+    asyncio.run(run())
 
 
 def test_home_dashboard_exposes_all_analytics_panels():

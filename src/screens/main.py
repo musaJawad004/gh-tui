@@ -339,7 +339,7 @@ class MainScreen(Screen):
         donut_space = chart_space - line_space
         plot_width = max(16, min(42, line_space - 6))
         donut_width = max(13, min(21, donut_space - 2))
-        plot_height = 4 if compact else 6
+        plot_height = 6 if compact else 8
         table = _grid(3, 2, padding=(0, 2))
         first_title, first_values, first_summary, first_color = first
         second_title, second_values, second_summary, second_color = second
@@ -351,13 +351,19 @@ class MainScreen(Screen):
                 self._c(first_color),
                 width=plot_width,
                 height=plot_height,
+                legend="7-day trend",
             ),
+        )
+        legend_labels = tuple(
+            part.strip().split(" ", 1)[1]
+            for part in second_summary.split("·")
+            if " " in part.strip()
         )
         right = Group(
             Text(second_title, style=f"bold {self._c('primary')}"),
             donut_chart(
                 second_values,
-                second_summary,
+                f"{sum(second_values)} total",
                 (
                     self._c(second_color),
                     self._c("success"),
@@ -366,6 +372,7 @@ class MainScreen(Screen):
                 ),
                 width=donut_width,
                 height=7 if compact else 9,
+                labels=legend_labels,
             ),
         )
         table.add_row(left, right)
@@ -851,9 +858,22 @@ class MainScreen(Screen):
             return
         self.action_focus_comment()
         editor = self.query_one("#comment-editor", CommentEditor)
-        mention = LOCAL_MENTIONS[self._mention_index % len(LOCAL_MENTIONS)]
-        self._mention_index += 1
-        editor.insert(mention + " ")
+        row, column = editor.cursor_location
+        line = editor.document.get_line(row)
+        start = column
+        while start > 0 and (line[start - 1].isalnum() or line[start - 1] in "_-"):
+            start -= 1
+        has_fragment = start > 0 and line[start - 1] == "@"
+        if has_fragment:
+            start -= 1
+            fragment = line[start:column].lower()
+            matches = [mention for mention in LOCAL_MENTIONS if mention.startswith(fragment)]
+            mention = matches[0] if matches else LOCAL_MENTIONS[0]
+            editor.replace(mention, (row, start), (row, column))
+        else:
+            mention = LOCAL_MENTIONS[self._mention_index % len(LOCAL_MENTIONS)]
+            self._mention_index += 1
+            editor.insert(mention)
 
     def action_back_to_list(self) -> None:
         editor = self.query_one("#comment-editor", TextArea)
