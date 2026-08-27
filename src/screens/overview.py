@@ -93,6 +93,15 @@ class OverviewScreen(Screen):
     OverviewScreen #ci-panel { width: 27%; margin-right: 1; }
     OverviewScreen #deploy-panel { width: 30%; }
 
+    OverviewScreen #analytics {
+        height: 1fr;
+        min-height: 7;
+        margin-top: 1;
+    }
+    OverviewScreen #analytics .dashboard-panel { width: 1fr; margin-right: 1; }
+    OverviewScreen #analytics .dashboard-panel:last-child { margin-right: 0; }
+    OverviewScreen #analytics .dashboard-panel Static { content-align: center middle; }
+
     OverviewScreen #quick-panel {
         height: 4;
         min-height: 3;
@@ -118,6 +127,7 @@ class OverviewScreen(Screen):
     OverviewScreen.compact #activity-title { height: 1; }
     OverviewScreen.compact #panels { height: 10; }
     OverviewScreen.compact #quick-panel { display: none; }
+    OverviewScreen.compact #analytics { display: none; }
     OverviewScreen.compact #command-line { height: 2; margin-top: 0; }
     OverviewScreen.compact #footer { height: 1; }
 
@@ -164,6 +174,25 @@ class OverviewScreen(Screen):
             yield DashboardPanel(
                 "deployments", self._deployments(), "(d) view all",
                 id="deploy-panel", classes="dashboard-panel",
+            )
+        with Horizontal(id="analytics"):
+            yield DashboardPanel(
+                "workflow success",
+                self._home_chart((91, 86, 94, 88, 96, 91, 95), "95%  ·  22 / 23 passing", "success"),
+                id="success-chart",
+                classes="dashboard-panel",
+            )
+            yield DashboardPanel(
+                "open vs completed",
+                self._home_chart((4, 7, 18, 24, 3, 5), "PR 4/18  ·  Issues 7/24", "primary"),
+                id="state-chart",
+                classes="dashboard-panel",
+            )
+            yield DashboardPanel(
+                "commit activity",
+                self._home_chart((4, 7, 3, 9, 12, 8, 14), "57 commits  ·  main ↑2", "warning"),
+                id="commit-chart",
+                classes="dashboard-panel",
             )
         yield DashboardPanel(
             "quick commands", self._quick_commands(),
@@ -332,6 +361,16 @@ class OverviewScreen(Screen):
         ):
             result.append(f"  {key}  ", style="bold")
             result.append(f"{label}    ", style="dim")
+        return result
+
+    def _home_chart(self, values: tuple[int, ...], summary: str, color: str) -> Text:
+        blocks = "▁▂▃▄▅▆▇█"
+        peak = max(values) or 1
+        result = Text(justify="center")
+        for value in values:
+            result.append(blocks[min(7, round((value / peak) * 7))], style=self._c(color))
+            result.append("  ")
+        result.append(f"\n{summary}", style="dim")
         return result
 
     def _command_line(self) -> Table:
