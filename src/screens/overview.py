@@ -11,7 +11,7 @@ from __future__ import annotations
 from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import OptionList, Static
@@ -22,7 +22,6 @@ from screens.settings import SettingsScreen
 from themes.palettes import ACCENT_BLUE as BLUE
 from themes.palettes import GREEN, RED, YELLOW
 from widgets.bar_chart import BarChart
-from widgets.spinner import BrailleSpinner
 
 CYAN = "#56D4DD"
 MAGENTA = "#C586E0"
@@ -62,7 +61,7 @@ class Panel(Vertical):
 
 class OverviewScreen(Screen):
     DEFAULT_CSS = """
-    OverviewScreen { layers: base overlay; background: $background; layout: vertical; }
+    OverviewScreen { background: $background; layout: vertical; }
 
     #ov-body { height: 1fr; }
 
@@ -90,9 +89,6 @@ class OverviewScreen(Screen):
     #failure { border: round $error; }
 
     #footer { dock: bottom; height: 1; padding: 0 1; color: $text-muted; }
-
-    #intro { layer: overlay; width: 100%; height: 100%; align: center middle; background: $background; }
-    #intro Static { content-align: center middle; width: auto; }
     """
 
     BINDINGS = [
@@ -166,21 +162,10 @@ class OverviewScreen(Screen):
 
     def on_mount(self) -> None:
         self.query_one("#menu", OptionList).highlighted = 0
-        self._panels = list(self.query(".animate"))
-        for p in self._panels:
-            p.styles.opacity = 0.0
-        intro = Container(
-            Static(self._brand_big()),
-            BrailleSpinner("loading workspace…"),
-            id="intro",
-        )
-        self.mount(intro)
-        self.set_timer(0.7, lambda: self._reveal(intro))
-
-    def _reveal(self, intro: Container) -> None:
-        intro.remove()
-        for i, panel in enumerate(self._panels):
-            panel.styles.animate("opacity", 1.0, duration=0.35, delay=0.03 * i, easing="out_cubic")
+        panels = list(self.query(".animate"))
+        for i, panel in enumerate(panels):
+            panel.styles.opacity = 0.0
+            panel.styles.animate("opacity", 1.0, duration=0.3, delay=0.02 * i, easing="out_cubic")
 
     # ---- actions ----
 
@@ -213,13 +198,6 @@ class OverviewScreen(Screen):
         t.append("   v0.1.0\n", style="dim")
         t.append("Your entire GitHub workflow,\n", style="dim")
         t.append("without leaving the terminal.", style="dim")
-        return t
-
-    def _brand_big(self) -> Text:
-        t = Text(justify="center")
-        t.append("gh", style=f"bold {BLUE}")
-        t.append("-flow\n", style="bold")
-        t.append("without leaving the terminal", style="dim")
         return t
 
     def _menu(self) -> OptionList:

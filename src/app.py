@@ -64,13 +64,15 @@ class GhTuiApp(App):
         from screens.overview import OverviewScreen
         from screens.pull_requests import HomeScreen
         from screens.settings import SettingsScreen
+        from screens.splash import SplashScreen
 
         if self._start_screen == "pull-requests":
             self.push_screen(HomeScreen())
         elif self._start_screen == "settings":
             self.push_screen(SettingsScreen())
         else:
-            self.push_screen(OverviewScreen())
+            # Default (and --screen overview): CLI-style boot splash -> dashboard.
+            self.push_screen(OverviewScreen() if self._start_screen == "overview" else SplashScreen())
 
 
 def main() -> None:
