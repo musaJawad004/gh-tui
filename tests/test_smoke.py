@@ -111,3 +111,29 @@ def test_overview_collapses_to_one_card_on_narrow_terminals():
             assert not app.screen.query_one("#deploy-panel").display
 
     asyncio.run(run())
+
+
+def test_workspace_responsive_tiers_keep_content_reachable():
+    async def check(size, expected_class: str) -> None:
+        app = GhTuiApp(start_screen="workspace")
+        async with app.run_test(size=size) as pilot:
+            await pilot.pause()
+            assert app.screen.has_class(expected_class)
+            assert app.screen.query_one("#workspace").display
+
+    asyncio.run(check((240, 70), "huge"))
+    asyncio.run(check((150, 44), "large"))
+    asyncio.run(check((100, 30), "single-pane"))
+    asyncio.run(check((80, 24), "narrow"))
+
+
+def test_workspace_shows_resize_message_below_supported_size():
+    async def run() -> None:
+        app = GhTuiApp(start_screen="workspace")
+        async with app.run_test(size=(50, 16)) as pilot:
+            await pilot.pause()
+            assert app.screen.has_class("too-small")
+            assert app.screen.query_one("#too-small").display
+            assert not app.screen.query_one("#workspace").display
+
+    asyncio.run(run())
