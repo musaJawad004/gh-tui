@@ -76,6 +76,10 @@ class MainScreen(Screen):
     }
     MainScreen.narrow #navigator { display: none; }
     MainScreen.narrow #detail { width: 100%; padding: 1; }
+    MainScreen.narrow.list-pane #navigator { display: block; width: 100%; border-right: none; }
+    MainScreen.narrow.list-pane #detail { display: none; }
+    MainScreen.narrow.detail-pane #navigator { display: none; }
+    MainScreen.narrow.detail-pane #detail { display: block; width: 100%; }
     MainScreen.compact #header { height: 3; }
     MainScreen.compact #status { height: 1; }
     MainScreen.compact #navigator,
@@ -90,11 +94,14 @@ class MainScreen(Screen):
         ("5", "section_5", ""),
         ("tab", "next_section", "Next"),
         ("shift+tab", "prev_section", "Prev"),
-        ("right", "next_section", ""),
-        ("left", "prev_section", ""),
-        ("j", "noop", ""),
-        ("k", "noop", ""),
-        ("enter", "noop", ""),
+        ("right", "focus_right", ""),
+        ("left", "focus_left", ""),
+        ("j", "selection_down", "Down"),
+        ("k", "selection_up", "Up"),
+        ("down", "selection_down", ""),
+        ("up", "selection_up", ""),
+        ("enter", "open_detail", "Open"),
+        ("escape", "back_to_list", "Back"),
         ("o", "overview", "Overview"),
         ("g", "settings", "Settings"),
     ]
@@ -118,6 +125,10 @@ class MainScreen(Screen):
         self._load_frame = 0
         self._load_timer = None
         self._compact = False
+        self._selected = [0] * len(SECTIONS)
+        self._item_counts = [4, 5, 6, 5, 8]
+        self._pane = "list"
+        self.add_class("list-pane")
         self._apply_breakpoints(self.size.width, self.size.height)
         self._render_workspace()
 
@@ -145,6 +156,9 @@ class MainScreen(Screen):
 
     def _c(self, name: str) -> str:
         return active_colors(self.app)[name]
+
+    def _selection(self) -> int:
+        return self._selected[self._section]
 
     def _render_workspace(self) -> None:
         self._render_header()
@@ -188,8 +202,7 @@ class MainScreen(Screen):
             ("#140", "Fix mobile layout issues", "fix/mobile", "✓", "6/6", "+48  -12", "18m"),
             ("#139", "Payment retry mechanism", "fix/payment", "✓", "6/6", "+92  -31", "3h"),
         ]
-        if self._compact:
-            rows = rows[:3]
+        selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=6)
         table.add_column(ratio=1)
@@ -209,7 +222,7 @@ class MainScreen(Screen):
             change_cell.stylize(self._c("success"), 0, changes.index("-") - 2)
             change_cell.stylize(self._c("error"), changes.index("-"))
             change_cell.append(f"\n{age} ago", style="dim")
-            style = f"on {self._c('row_selected')}" if index == 0 else None
+            style = f"on {self._c('row_selected')}" if index == selected else None
             table.add_row(Text(number, style=self._c("primary")), title_cell, ci_cell, change_cell, style=style)
 
         left = Group(
@@ -218,18 +231,20 @@ class MainScreen(Screen):
             table,
         )
 
+        number, title, branch, _ci, checks, changes, age = rows[selected]
         meta = Text()
-        meta.append("musa/my-app  ·  #142\n", style=self._c("primary"))
-        meta.append("Add Google OAuth login\n", style="bold")
+        meta.append(f"musa/my-app  ·  {number}\n", style=self._c("primary"))
+        meta.append(f"{title}\n", style="bold")
         meta.append("\n OPEN ", style=f"bold {self._c('background')} on {self._c('primary')}")
-        meta.append("  feat/oauth → main  ·  by @musa  ·  4m ago\n", style="dim")
-        meta.append("\n▣ Overview   ✓ Checks 2/2   ◇ Files changed 8   ◌ Activity", style="bold")
+        meta.append(f"  {branch} → main  ·  by @musa  ·  {age} ago\n", style="dim")
+        meta.append(f"\n▣ Overview   ✓ Checks {checks}   ◇ Files changed 8   ◌ Activity", style="bold")
 
         summary = Text()
         summary.append("Ready for review\n", style=f"bold {self._c('success')}")
-        summary.append("Adds Google OAuth sign-in, session persistence, and callback handling.\n\n")
-        summary.append("+391 additions   ", style=self._c("success"))
-        summary.append("-4 deletions   ", style=self._c("error"))
+        summary.append(f"{title} is ready for a focused review before merge.\n\n")
+        added, removed = changes.split("  ")
+        summary.append(f"{added} additions   ", style=self._c("success"))
+        summary.append(f"{removed} deletions   ", style=self._c("error"))
         summary.append("8 files changed", style="dim")
 
         comment = Text()
@@ -245,7 +260,9 @@ class MainScreen(Screen):
             Panel(comment, border_style=self._c("border")),
             Panel(Text("comment  █", style="dim"), border_style=self._c("border")),
         )
-        return left, right, self._status("PR 1/4", "2 approvals", "2/2 checks", "8 files")
+        return left, right, self._status(
+            f"PR {selected + 1}/{len(rows)}", "2 approvals", f"{checks} checks", "8 files"
+        )
 
     def _issues(self):
         rows = [
@@ -255,8 +272,7 @@ class MainScreen(Screen):
             ("#80", "Document the config file", "docs · good first issue", "3", "1d"),
             ("#78", "Flaky E2E on checkout step", "bug · ci", "6", "1d"),
         ]
-        if self._compact:
-            rows = rows[:3]
+        selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=6)
         table.add_column(ratio=1)
@@ -265,21 +281,22 @@ class MainScreen(Screen):
             body = Text(title, style="bold" if index == 0 else "")
             body.append(f"\n{labels}", style=self._c("warning"))
             tail = Text(f"◌ {comments}\n{age}", style="dim", justify="right")
-            style = f"on {self._c('row_selected')}" if index == 0 else None
+            style = f"on {self._c('row_selected')}" if index == selected else None
             table.add_row(Text(number, style=self._c("warning")), body, tail, style=style)
         left = Group(self._search("is:issue is:open", "7 open"), Text("\n"), table)
 
+        number, title, labels, comments, age = rows[selected]
         header = Text()
-        header.append("musa/my-app  ·  Issue #87\n", style=self._c("primary"))
-        header.append("OAuth redirect fails on Safari\n", style="bold")
+        header.append(f"musa/my-app  ·  Issue {number}\n", style=self._c("primary"))
+        header.append(f"{title}\n", style="bold")
         header.append("\n OPEN ", style=f"bold {self._c('background')} on {self._c('success')}")
-        header.append("  opened by @dlvhdr 2h ago  ·  bug  auth\n", style="dim")
+        header.append(f"  opened by @dlvhdr {age} ago  ·  {labels}\n", style="dim")
         header.append("\n▣ Conversation   ◉ Timeline   ◇ Related PRs", style="bold")
 
         first = Text()
         first.append("@dlvhdr  ·  author  ·  2h\n", style="bold")
-        first.append("Safari returns to the callback without the stored state cookie. ")
-        first.append("Chrome and Firefox both work as expected.\n\n", style="dim")
+        first.append(f"Discussion for “{title}”. ")
+        first.append("This thread captures the current context and reproduction details.\n\n", style="dim")
         first.append("macOS 15.6  ·  Safari 18.6  ·  production", style=self._c("warning"))
         reply = Text()
         reply.append("@musa  ·  maintainer  ·  38m\n", style="bold")
@@ -293,7 +310,12 @@ class MainScreen(Screen):
             Text("\n reply", style=self._c("primary")),
             Panel(Text("Write a comment…  █\n\nMarkdown supported", style="dim"), border_style=self._c("primary")),
         )
-        return left, right, self._status("Issue 1/7", "4 comments", "2 participants", "updated 2h")
+        return left, right, self._status(
+            f"Issue {selected + 1}/{len(rows)}",
+            f"{comments} comments",
+            "2 participants",
+            f"updated {age}",
+        )
 
     def _pipelines(self):
         rows = [
@@ -304,8 +326,7 @@ class MainScreen(Screen):
             ("○", "deploy preview", "feat/oauth", "running", "3m 11s", "now"),
             ("✓", "security scan", "main", "passed", "1m 34s", "18m"),
         ]
-        if self._compact:
-            rows = rows[:4]
+        selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=3)
         table.add_column(ratio=1)
@@ -316,15 +337,20 @@ class MainScreen(Screen):
             body.append(f"\n{branch}", style="dim")
             tail = Text(state, style=self._c(color), justify="right")
             tail.append(f"\n{duration} · {age}", style="dim")
-            style = f"on {self._c('row_selected')}" if index == 0 else None
+            style = f"on {self._c('row_selected')}" if index == selected else None
             table.add_row(Text(icon, style=self._c(color)), body, tail, style=style)
         left = Group(self._search("branch:main event:push", "23 runs"), Text("\n"), table)
 
+        _icon, name, branch, state, duration, age = rows[selected]
+        state_color = "error" if state == "failed" else "warning" if state == "running" else "success"
         header = Text()
-        header.append("backend-tests  ·  run #9182\n", style=self._c("primary"))
-        header.append("main  ·  981dad2  ·  push by @musa\n", style="dim")
-        header.append("\n FAILED ", style=f"bold {self._c('background')} on {self._c('error')}")
-        header.append("  4m 12s  ·  finished 4m ago\n")
+        header.append(f"{name}  ·  run #{9182 - selected}\n", style=self._c("primary"))
+        header.append(f"{branch}  ·  981dad2  ·  push by @musa\n", style="dim")
+        header.append(
+            f"\n {state.upper()} ",
+            style=f"bold {self._c('background')} on {self._c(state_color)}",
+        )
+        header.append(f"  {duration}  ·  {age} ago\n")
         header.append("\n▣ Summary   ◉ Jobs 3   ≡ Logs   ⇧ Artifacts 2", style="bold")
 
         steps = Table.grid(expand=True, padding=(0, 1))
@@ -340,10 +366,15 @@ class MainScreen(Screen):
         ):
             steps.add_row(Text(icon, style=self._c(color)), Text(label), Text(value, style="dim"))
         logs = Text()
-        logs.append("tests/test_auth.py::test_safari_callback ", style="dim")
-        logs.append("FAILED\n", style=self._c("error"))
-        logs.append("AssertionError: state cookie was not restored\n", style=self._c("error"))
-        logs.append("1 failed, 248 passed in 181.44s", style="dim")
+        logs.append(f"workflow/{name.replace(' ', '-')} ", style="dim")
+        logs.append(f"{state.upper()}\n", style=self._c(state_color))
+        logs.append(
+            "AssertionError: state cookie was not restored\n"
+            if state == "failed"
+            else "All configured steps completed without errors.\n",
+            style=self._c(state_color),
+        )
+        logs.append(f"selected run finished in {duration}", style="dim")
         right = Group(
             header,
             Text("\n pipeline", style=self._c("primary")),
@@ -352,7 +383,9 @@ class MainScreen(Screen):
             Panel(logs, border_style=self._c("error")),
             Text("\n deployments  production ✓   staging ✓   preview ○ running", style="dim"),
         )
-        return left, right, self._status("Run 1/23", "3 jobs", "1 failed", "2 artifacts")
+        return left, right, self._status(
+            f"Run {selected + 1}/{len(rows)}", "3 jobs", state, "2 artifacts"
+        )
 
     def _repositories(self):
         rows = [
@@ -362,8 +395,7 @@ class MainScreen(Screen):
             ("musa/emberflow", "Go", "public", "64", "5d"),
             ("musa/job-agent", "Python", "private", "0", "1w"),
         ]
-        if self._compact:
-            rows = rows[:3]
+        selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(ratio=1)
         table.add_column(width=13)
@@ -372,18 +404,26 @@ class MainScreen(Screen):
             body = Text(name, style=f"bold {self._c('primary')}")
             body.append(f"\n{lang} · {visibility}", style="dim")
             tail = Text(f"★ {stars}\n{age}", style=self._c("warning"), justify="right")
-            table.add_row(body, "", tail, style=f"on {self._c('row_selected')}" if index == 0 else None)
+            table.add_row(
+                body,
+                "",
+                tail,
+                style=f"on {self._c('row_selected')}" if index == selected else None,
+            )
         left = Group(self._search("owner:musa", "6 repos"), Text("\n"), table)
+        name, lang, visibility, stars, age = rows[selected]
         info = Text()
-        info.append("musa/my-app\n", style=f"bold {self._c('primary')}")
+        info.append(f"{name}\n", style=f"bold {self._c('primary')}")
         info.append("GitHub workflow dashboard and deployment toolkit.\n\n", style="dim")
         info.append("main  ↑2   clean\n", style=self._c("success"))
-        info.append("Python  ·  MIT  ·  public  ·  ★ 42\n\n", style="dim")
+        info.append(f"{lang}  ·  MIT  ·  {visibility}  ·  ★ {stars}\n\n", style="dim")
         info.append("4 pull requests   7 issues   3 releases\n")
         info.append("CI passing   production healthy", style=self._c("success"))
         tree = Text("▾ src\n  ▾ screens\n    overview.py\n    main.py\n  ▾ widgets\n    spinner.py\n  app.py\n▸ tests\nREADME.md", style="dim")
         right = Group(info, Text("\n repository tree", style=self._c("primary")), Panel(tree, border_style=self._c("border")))
-        return left, right, self._status("Repo 1/6", "main ↑2", "clean", "updated 2h")
+        return left, right, self._status(
+            f"Repo {selected + 1}/{len(rows)}", "main ↑2", "clean", f"updated {age}"
+        )
 
     def _commits(self):
         tree = Text()
@@ -395,20 +435,22 @@ class MainScreen(Screen):
             ("    ", "overview.py", "M  +31 -12", "warning", False),
             ("  ▾", "widgets", "", "primary", False),
             ("    ", "spinner.py", "M  +198 -46", "warning", False),
+            ("    ", "app.py", "M  +16 -4", "warning", False),
             ("▾", "tests", "", "primary", False),
             ("    ", "test_loaders.py", "A  +41", "success", False),
             ("    ", "test_smoke.py", "M  +16 -0", "warning", False),
             ("  ", "README.md", "M  +12 -3", "warning", False),
             ("  ", "pyproject.toml", "M  +4 -1", "warning", False),
         ]
-        if self._compact:
-            file_rows = file_rows[:8]
-        for prefix, name, change, color, selected in file_rows:
+        selectable = [2, 3, 5, 6, 8, 9, 10, 11]
+        selected = min(self._selection(), len(selectable) - 1)
+        selected_row = selectable[selected]
+        for index, (prefix, name, change, color, _initially_selected) in enumerate(file_rows):
             row = Text(f"{prefix} ")
             row.append(name, style=self._c("primary") if "▾" in prefix else "")
             if change:
                 row.append(f"  {change}", style=self._c(color))
-            if selected:
+            if index == selected_row:
                 row.stylize(f"bold on {self._c('row_selected')}")
             tree.append_text(row)
             tree.append("\n")
@@ -423,16 +465,29 @@ class MainScreen(Screen):
         head.append("-83\n", style=self._c("error"))
         head.append("\n◀ previous commit   1 / 8 files   next file ▶", style="dim")
 
-        diff_header = Text("▣ src/screens/main.py     ", style="bold")
-        diff_header.append("+84", style=self._c("success"))
-        diff_header.append("  -21", style=self._c("error"))
+        prefix, filename, change, _color, _initially_selected = file_rows[selected_row]
+        path = filename
+        if selected_row in {2, 3}:
+            path = f"src/screens/{filename}"
+        elif selected_row in {5}:
+            path = f"src/widgets/{filename}"
+        elif selected_row == 6:
+            path = f"src/{filename}"
+        elif selected_row in {8, 9}:
+            path = f"tests/{filename}"
+        change_parts = change.split()
+        additions = next((part for part in change_parts if part.startswith("+")), "+0")
+        deletions = next((part for part in change_parts if part.startswith("-")), "-0")
+        diff_header = Text(f"▣ {path}     ", style="bold")
+        diff_header.append(additions, style=self._c("success"))
+        diff_header.append(f"  {deletions}", style=self._c("error"))
         diff = _grid(1, 1, padding=(0, 1))
         old = Text()
         new = Text()
         for number, code, style in (
             (26, "class MainScreen(Screen):", ""),
             (27, "    layout: vertical", ""),
-            (28, "    DataTable(id='list')", "error"),
+            (28, f"    old implementation: {filename}", "error"),
             (29, "", ""),
             (30, "    def _load_section():", ""),
             (31, "        table.clear()", "error"),
@@ -442,7 +497,7 @@ class MainScreen(Screen):
         for number, code, style in (
             (26, "class MainScreen(Screen):", ""),
             (27, "    layout: vertical", ""),
-            (28, "    Horizontal(id='workspace')", "success"),
+            (28, f"    selected file: {filename}", "success"),
             (29, "    VerticalScroll(id='detail')", "success"),
             (30, "    def _render_workspace():", ""),
             (31, "        left, right = renderer()", "success"),
@@ -451,7 +506,12 @@ class MainScreen(Screen):
             new.append(f"{number:>3}  {code}\n", style=self._c(style) if style else "dim")
         diff.add_row(old, new)
         right = Group(head, Text("\n"), Panel(diff, title=diff_header, border_style=self._c("border")))
-        status = self._status("Commit 981dad2", "ahead 2 · behind 0", "file 1/8", "+386 -83")
+        status = self._status(
+            "Commit 981dad2",
+            "ahead 2 · behind 0",
+            f"file {selected + 1}/{len(selectable)}",
+            f"{additions} {deletions}",
+        )
         return left, right, status
 
     def _status(self, *items: str) -> Text:
@@ -460,7 +520,10 @@ class MainScreen(Screen):
             if index:
                 result.append("  ·  ", style="dim")
             result.append(item, style=self._c("primary") if index == 0 else "dim")
-        result.append("     [tab] section  [←/→] switch  [o] overview  [q] quit", style="dim")
+        result.append(
+            "     [j/k] select  [enter] detail  [tab] section  [←/→] pane  [o] overview  [q] quit",
+            style="dim",
+        )
         return result
 
     def _set_section(self, section: int) -> None:
@@ -513,6 +576,40 @@ class MainScreen(Screen):
     def action_prev_section(self) -> None:
         self._set_section(self._section - 1)
 
+    def action_selection_down(self) -> None:
+        count = self._item_counts[self._section]
+        self._selected[self._section] = (self._selection() + 1) % count
+        self._render_workspace()
+
+    def action_selection_up(self) -> None:
+        count = self._item_counts[self._section]
+        self._selected[self._section] = (self._selection() - 1) % count
+        self._render_workspace()
+
+    def _show_pane(self, pane: str) -> None:
+        self._pane = pane
+        self.remove_class("list-pane", "detail-pane")
+        self.add_class(f"{pane}-pane")
+
+    def action_open_detail(self) -> None:
+        self._show_pane("detail")
+
+    def action_back_to_list(self) -> None:
+        if self.has_class("narrow") and self._pane == "detail":
+            self._show_pane("list")
+
+    def action_focus_right(self) -> None:
+        if self.has_class("narrow") and self._pane == "list":
+            self._show_pane("detail")
+        else:
+            self.action_next_section()
+
+    def action_focus_left(self) -> None:
+        if self.has_class("narrow") and self._pane == "detail":
+            self._show_pane("list")
+        else:
+            self.action_prev_section()
+
     def action_section_1(self) -> None:
         self._set_section(0)
 
@@ -537,6 +634,3 @@ class MainScreen(Screen):
         from screens.settings import SettingsScreen
 
         self.app.push_screen(SettingsScreen())
-
-    def action_noop(self) -> None:
-        pass

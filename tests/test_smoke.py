@@ -55,8 +55,33 @@ def test_workspace_uses_compact_single_pane_at_cli_sizes():
             await pilot.pause()
             assert app.screen.has_class("narrow")
             assert app.screen.has_class("compact")
+            assert app.screen.query_one("#navigator").display
+            assert not app.screen.query_one("#detail").display
+            await pilot.press("enter")
+            await pilot.pause()
             assert not app.screen.query_one("#navigator").display
             assert app.screen.query_one("#detail").display
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.screen.query_one("#navigator").display
+
+    asyncio.run(run())
+
+
+def test_every_workspace_item_is_keyboard_reachable():
+    async def run() -> None:
+        app = GhTuiApp(start_screen="workspace")
+        async with app.run_test(size=(140, 40)) as pilot:
+            for section, count in enumerate((4, 5, 6, 5, 8)):
+                if section:
+                    await pilot.press(str(section + 1))
+                    await pilot.pause(0.7)
+                visited = set()
+                for _ in range(count):
+                    visited.add(app.screen._selection())
+                    await pilot.press("j")
+                    await pilot.pause()
+                assert visited == set(range(count))
 
     asyncio.run(run())
 
