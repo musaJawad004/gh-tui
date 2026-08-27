@@ -17,6 +17,8 @@ from core.github_data import (
     GhCliError,
     GitHubSnapshot,
     detect_local_repository,
+    load_issue_detail,
+    load_pull_request_detail,
     load_snapshot,
     parse_repository_url,
 )
@@ -54,6 +56,8 @@ class GhTuiApp(App):
         self.github_snapshot = None
         self.data_loading = False
         self.data_error: str | None = None
+        self.detail_data: dict | None = None
+        self.detail_loading = False
         saved_theme = self.settings.get("theme")
         requested_theme = theme if theme in THEME_NAMES else saved_theme
         self.theme = requested_theme if requested_theme in THEME_NAMES else DEFAULT_THEME
@@ -176,6 +180,37 @@ class GhTuiApp(App):
         if self.screen:
             self.pop_screen()
         self.begin_data_load()
+
+    def begin_detail_load(self, kind: str, number: int) -> None:
+        """Fetch one PR/issue detail only when the user opens it."""
+        if self.detail_loading or not self.repository:
+            return
+        self.detail_loading = True
+        self.detail_data = None
+        self.run_worker(lambda: self._load_detail(kind, number), thread=True, exclusive=False)
+
+    def _load_detail(self, kind: str, number: int) -> None:
+        try:
+            loader = load_pull_request_detail if kind == "pr" else load_issue_detail
+            detail = loader(self.repository, number, cwd=Path.cwd())
+        except GhCliError as exc:
+            self.call_from_thread(self._detail_failed, str(exc))
+            return
+        self.call_from_thread(self._detail_loaded, detail)
+
+    def _detail_loaded(self, detail: dict) -> None:
+        self.detail_data = detail
+        self.detail_loading = False
+        refresh = getattr(self.screen, "refresh_data", None)
+        if refresh:
+            refresh()
+
+    def _detail_failed(self, error: str) -> None:
+        self.detail_loading = False
+        self.data_error = error
+        refresh = getattr(self.screen, "refresh_data", None)
+        if refresh:
+            refresh()
 
 def main() -> None:
     GhTuiApp().run()

@@ -166,6 +166,7 @@ class MainScreen(Screen):
         ("down", "selection_down", ""),
         ("up", "selection_up", ""),
         ("enter", "open_detail", "Open"),
+        ("n", "load_more", "Load more"),
         ("e", "focus_comment", "Comment"),
         ("escape", "back_to_list", "Back"),
         ("o", "overview", "Overview"),
@@ -273,7 +274,7 @@ class MainScreen(Screen):
         left, right, status = renderers[self._section]()
         snapshot = self.app.github_snapshot
         if snapshot is not None and not self.app.data_error:
-            counts = [len(snapshot.pull_requests), len(snapshot.issues), len(snapshot.workflows), 1, len(snapshot.commits)]
+            counts = [len(snapshot.pull_requests), len(snapshot.issues), len(snapshot.workflows), 0, len(snapshot.commits)]
             if counts[self._section] > 0:
                 self._item_counts[self._section] = counts[self._section]
         self.query_one("#navigator-content", Static).update(left)
@@ -522,24 +523,37 @@ class MainScreen(Screen):
         number, title, branch, _ci, checks, changes, age = rows[selected]
         meta = Text()
         meta.append(f"{self.app.repository or 'repository'}  ·  {number}\n", style=self._c("primary"))
-        meta.append(f"{title}\n", style="bold")
+        detail = self.app.detail_data if self.app.detail_data and self.app.detail_data.get("number") == int(number.lstrip("#")) else None
+        if self.app.detail_loading:
+            meta.append("Loading pull request details…\n", style=self._c("primary"))
+        meta.append((detail or {}).get("title", title) + "\n", style="bold")
         meta.append("\n OPEN ", style=f"bold {self._c('background')} on {self._c('primary')}")
         meta.append(f"  {branch} → main  ·  by @musa  ·  {age} ago\n", style="dim")
         meta.append(f"\n▣ Overview   ✓ Checks {checks}   ◇ Files changed 8   ◌ Activity", style="bold")
 
         summary = Text()
         summary.append("Ready for review\n", style=f"bold {self._c('success')}")
-        summary.append(f"{title} is ready for a focused review before merge.\n\n")
-        added, removed = changes.split("  ")
+        summary.append(f"{(detail or {}).get('body') or title + ' is ready for a focused review before merge.'}\n\n")
+        added = f"+{(detail or {}).get('additions', 0)}"
+        removed = f"-{(detail or {}).get('deletions', 0)}"
         summary.append(f"{added} additions   ", style=self._c("success"))
         summary.append(f"{removed} deletions   ", style=self._c("error"))
         files_changed = next((item.get("changedFiles") for item in (self.app.github_snapshot.pull_requests if self.app.github_snapshot else []) if f"#{item.get('number')}" == number), 0)
         summary.append(f"{files_changed or 0} files changed", style="dim")
 
         comment = Text()
-        if self.app.github_snapshot is not None:
-            comment.append("No review activity loaded for this pull request.\n", style="dim")
-            comment.append("Read-only loading does not invent conversation data.", style="dim")
+        if detail:
+            comments = detail.get("comments_data") or []
+            reviews = detail.get("reviews_data") or []
+            if comments or reviews:
+                for item in (comments + reviews)[-5:]:
+                    author = (item.get("user") or {}).get("login", "unknown")
+                    comment.append(f"@{author}  ·  {item.get('created_at', '')}\n", style="bold")
+                    comment.append(f"{item.get('body', '')}\n\n", style="dim")
+            else:
+                comment.append("No review activity returned.\n", style="dim")
+        elif self.app.github_snapshot is not None:
+            comment.append("Open the detail to fetch review activity…", style="dim")
         else:
             comment.append("@sarah  ·  reviewer  ·  2m\n", style="bold")
             comment.append("The callback flow looks clean. One small question about token expiry, ")
@@ -588,16 +602,21 @@ class MainScreen(Screen):
         number, title, labels, comments, age = rows[selected]
         header = Text()
         header.append(f"{self.app.repository or 'repository'}  ·  Issue {number}\n", style=self._c("primary"))
-        header.append(f"{title}\n", style="bold")
+        detail = self.app.detail_data if self.app.detail_data and self.app.detail_data.get("number") == int(number.lstrip("#")) else None
+        header.append((detail or {}).get("title", title) + "\n", style="bold")
         header.append("\n OPEN ", style=f"bold {self._c('background')} on {self._c('success')}")
         header.append(f"  opened by @dlvhdr {age} ago  ·  {labels}\n", style="dim")
         header.append("\n▣ Conversation   ◉ Timeline   ◇ Related PRs", style="bold")
 
         first = Text()
         reply = Text()
-        if self.app.github_snapshot is not None:
-            first.append("No issue conversation was returned by the read-only query.\n", style="dim")
-            reply.append("Comments are not fabricated; refresh to query the repository again.", style="dim")
+        if detail and detail.get("comments_data"):
+            for item in detail["comments_data"][-5:]:
+                author = (item.get("user") or {}).get("login", "unknown")
+                first.append(f"@{author}  ·  {item.get('created_at', '')}\n", style="bold")
+                first.append(f"{item.get('body', '')}\n\n", style="dim")
+        elif self.app.github_snapshot is not None:
+            first.append("Open the detail to fetch issue conversation…", style="dim")
         else:
             first.append("@dlvhdr  ·  author  ·  2h\n", style="bold")
             first.append(f"Discussion for “{title}”. ")
@@ -916,9 +935,9 @@ class MainScreen(Screen):
                 result.append("  ·  ", style="dim")
             result.append(item, style=self._c("primary") if index == 0 else "dim")
         controls = (
-            "   [j/k] select  [enter] detail  [e] edit  [esc] done  [q] quit"
+            "   [j/k] select  [enter] detail  [n] more  [e] edit  [esc] done  [q] quit"
             if self.size.width < 110
-            else "     [j/k] select  [enter] detail  [e] edit  [esc] done  [ctrl+s] local save  [tab] section  [o] overview  [q] quit"
+            else "     [j/k] select  [enter] detail  [n] more  [e] edit  [esc] done  [ctrl+s] local save  [tab] section  [o] overview  [q] quit"
         )
         result.append(controls, style="dim")
         if self.app.data_loading:
@@ -1001,6 +1020,23 @@ class MainScreen(Screen):
 
     def action_open_detail(self) -> None:
         self._show_pane("detail")
+        if self._section in {0, 1}:
+            rows = self.app.github_snapshot.pr_rows() if self._section == 0 and self.app.github_snapshot else []
+            if self._section == 1 and self.app.github_snapshot:
+                rows = self.app.github_snapshot.issue_rows()
+            if rows:
+                number = int(str(rows[min(self._selection(), len(rows) - 1)][0]).lstrip("#"))
+                self.app.begin_detail_load("pr" if self._section == 0 else "issue", number)
+
+    def action_load_more(self) -> None:
+        """Fetch the next bounded window without changing the current repository."""
+        current = int(self.app.settings.get("per_page", 30))
+        if current >= 100:
+            self.notify("Reached the 100-item fetch window", timeout=1.5)
+            return
+        self.app.settings["per_page"] = min(100, current + 30)
+        self.app.begin_data_load(force=True)
+        self.notify(f"Loading next window ({self.app.settings['per_page']} items)…", timeout=1.5)
 
     def action_focus_comment(self) -> None:
         if self._section not in {0, 1}:

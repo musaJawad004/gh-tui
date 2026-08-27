@@ -231,6 +231,28 @@ def clear_snapshot_cache(repository: str | None = None) -> None:
         _snapshot_cache.pop(parse_repository_url(repository) or repository, None)
 
 
+def load_pull_request_detail(repository: str, number: int, *, cwd: Path | None = None) -> dict[str, Any]:
+    """Load one PR and its review surface lazily (all GET requests)."""
+    repo = parse_repository_url(repository)
+    if not repo:
+        raise GhCliError("repository must be a GitHub URL or owner/name")
+    detail = _run_json(["api", f"repos/{repo}/pulls/{number}"], cwd=cwd)
+    detail["comments_data"] = _safe_query(["api", f"repos/{repo}/issues/{number}/comments?per_page=100"], cwd=cwd, default=[])
+    detail["reviews_data"] = _safe_query(["api", f"repos/{repo}/pulls/{number}/reviews?per_page=100"], cwd=cwd, default=[])
+    detail["files_data"] = _safe_query(["api", f"repos/{repo}/pulls/{number}/files?per_page=100"], cwd=cwd, default=[])
+    return detail
+
+
+def load_issue_detail(repository: str, number: int, *, cwd: Path | None = None) -> dict[str, Any]:
+    """Load one issue and its conversation lazily (all GET requests)."""
+    repo = parse_repository_url(repository)
+    if not repo:
+        raise GhCliError("repository must be a GitHub URL or owner/name")
+    detail = _run_json(["api", f"repos/{repo}/issues/{number}"], cwd=cwd)
+    detail["comments_data"] = _safe_query(["api", f"repos/{repo}/issues/{number}/comments?per_page=100"], cwd=cwd, default=[])
+    return detail
+
+
 def load_snapshot(repository: str, *, cwd: Path | None = None, limit: int = 30, force: bool = False, ttl: float = 1800) -> GitHubSnapshot:
     """Fetch all read-only dashboard resources for one repository."""
     repo = parse_repository_url(repository)
