@@ -159,3 +159,57 @@ def contribution_calendar(
     result.append("  More", style="dim")
     result.append(f"   │   {summary}", style=f"bold {color}")
     return result
+
+
+def horizontal_bars(
+    labels: tuple[str, ...],
+    values: tuple[int, ...],
+    colors: tuple[str, ...],
+    summary: str,
+    *,
+    width: int = 42,
+) -> Text:
+    """Render labeled proportional bars with exact values and a compact legend."""
+    peak = max(values, default=1) or 1
+    label_width = max((len(label) for label in labels), default=4)
+    bar_width = max(8, width - label_width - 9)
+    result = Text(no_wrap=True)
+    for index, (label, value) in enumerate(zip(labels, values, strict=False)):
+        filled = round(value / peak * bar_width)
+        color = colors[index % len(colors)]
+        result.append(f"{label:<{label_width}}  ", style="dim")
+        result.append("█" * filled, style=f"bold {color}")
+        result.append("░" * (bar_width - filled), style="dim")
+        result.append(f"  {value:>3}\n", style=color)
+    result.append(summary, style="bold")
+    return result
+
+
+def vertical_bars(
+    values: tuple[int, ...],
+    labels: tuple[str, ...],
+    summary: str,
+    color: str,
+    *,
+    width: int = 42,
+    height: int = 7,
+) -> Text:
+    """Render a full-width vertical histogram with category labels."""
+    peak = max(values, default=1) or 1
+    height = max(4, height)
+    count = max(1, len(values))
+    slot_width = max(3, width // count)
+    bar_width = max(1, slot_width - 2)
+    result = Text(no_wrap=True)
+    for row in range(height, 0, -1):
+        threshold = row / height
+        for value in values:
+            filled = value / peak >= threshold
+            result.append(" " + ("█" * bar_width if filled else " " * bar_width) + " ", style=color)
+        result.append("\n")
+    result.append("─" * min(width, slot_width * count), style="dim")
+    result.append("\n")
+    for label in labels:
+        result.append(f"{label:^{slot_width}}"[:slot_width], style="dim")
+    result.append(f"\n{summary}", style=f"bold {color}")
+    return result
