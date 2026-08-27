@@ -253,6 +253,16 @@ def load_issue_detail(repository: str, number: int, *, cwd: Path | None = None) 
     return detail
 
 
+def load_workflow_detail(repository: str, run_id: int, *, cwd: Path | None = None) -> dict[str, Any]:
+    """Load one Actions run and its jobs lazily."""
+    repo = parse_repository_url(repository)
+    if not repo:
+        raise GhCliError("repository must be a GitHub URL or owner/name")
+    detail = _run_json(["api", f"repos/{repo}/actions/runs/{run_id}"], cwd=cwd)
+    detail["jobs_data"] = _safe_query(["api", f"repos/{repo}/actions/runs/{run_id}/jobs?per_page=100"], cwd=cwd, default={"jobs": []}).get("jobs", [])
+    return detail
+
+
 def load_snapshot(repository: str, *, cwd: Path | None = None, limit: int = 30, force: bool = False, ttl: float = 1800) -> GitHubSnapshot:
     """Fetch all read-only dashboard resources for one repository."""
     repo = parse_repository_url(repository)
