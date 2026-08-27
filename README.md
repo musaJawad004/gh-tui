@@ -15,9 +15,8 @@ PR/issue dashboard, gh-tui aims to cover the **whole workflow**: repositories, b
 commits, stash, pull requests, reviews, issues, Actions/CI, deployments, releases,
 secrets, and repo settings.
 
-> ⚠️ **Status: pre-code scaffold.** This repo currently contains only the project
-> structure, planning docs, and empty module stubs. No functionality is implemented yet.
-> See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> **Status: early preview.** The keyboard-driven workspace, focused GitHub lists,
+> settings, and theme system are runnable with mock data while API integration continues.
 
 ---
 
@@ -94,15 +93,23 @@ gh-tui/
     └── themes/       # light / dark / color-scheme themes (see themes/README.md)
 ```
 
+## Terminal workspace
+
+The default screen is intentionally list-first rather than a web-style dashboard: one
+compact section switcher, one data table, one selected-item context line, and one command
+line. Use `1`–`5` or `tab` to change sections, `j`/`k` to move, `enter` to inspect an item,
+and `o` to open the optional overview.
+
 ## Themes
 
-Multiple built-in themes (light + dark + schemes like dracula/nord). Colors are semantic
-tokens resolved by the active theme, so `app.theme = "dracula"` restyles the whole UI
-instantly. Users pick one in `config.yml`. See [`src/themes/README.md`](src/themes/README.md).
+There are 25 built-in light, dark, minimal, and colorful schemes. Colors are semantic
+tokens resolved by the active theme, including inline status/diff colors. Pick visually in
+Settings, press `ctrl+t` to cycle, pass `--theme NAME`, or run `--list-themes`.
+See [`src/themes/README.md`](src/themes/README.md).
 
 ## Getting started (dev)
 
-Not runnable yet — this is a scaffold. Setup that works today:
+Set up the development environment:
 
 ```bash
 gh auth login                       # authenticate GitHub
@@ -112,12 +119,11 @@ pip install -e ".[dev]"             # install runtime + dev deps
 pytest                              # structure tests should pass
 ```
 
-Once implementation begins:
-
 ```bash
 python src/                         # launch (runs src/__main__.py)
 # or, after the editable install:
 gh-tui
+gh-tui --list-themes                # print all 25 schemes
 ```
 
 ## License

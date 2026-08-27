@@ -1,7 +1,7 @@
 """GhTuiApp — the Textual application.
 
 Registers themes, applies the default (or a requested) theme, and opens the requested
-start screen (the Overview dashboard by default).
+start screen (the focused workspace by default).
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ class GhTuiApp(App):
         self.settings: dict = {
             "theme": self.theme,
             "nerd_fonts": False,
-            "default_screen": "overview",
+            "default_screen": "workspace",
             "confirm_destructive": True,
             "auto_refresh": "30s",
             "per_page": 30,
@@ -58,21 +58,28 @@ class GhTuiApp(App):
         i = names.index(current) if current in names else 0
         self.theme = names[(i + 1) % len(names)]
         self.settings["theme"] = self.theme
+        refresh_theme = getattr(self.screen, "refresh_theme", None)
+        if refresh_theme:
+            refresh_theme()
         self.notify(f"Theme: {self.theme}", timeout=1.5)
 
     def on_mount(self) -> None:
+        from screens.main import MainScreen
         from screens.overview import OverviewScreen
-        from screens.pull_requests import HomeScreen
         from screens.settings import SettingsScreen
         from screens.splash import SplashScreen
 
         if self._start_screen == "pull-requests":
-            self.push_screen(HomeScreen())
+            self.push_screen(MainScreen(section=0))
+        elif self._start_screen == "workspace":
+            self.push_screen(MainScreen())
         elif self._start_screen == "settings":
             self.push_screen(SettingsScreen())
         else:
-            # Default (and --screen overview): CLI-style boot splash -> dashboard.
-            self.push_screen(OverviewScreen() if self._start_screen == "overview" else SplashScreen())
+            # Default: CLI-style boot splash -> focused terminal workspace.
+            self.push_screen(
+                OverviewScreen() if self._start_screen == "overview" else SplashScreen()
+            )
 
 
 def main() -> None:

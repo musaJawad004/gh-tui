@@ -12,15 +12,14 @@ import sys
 from version import __version__
 
 REPO = "musaJawad004/gh-tui"
-SCREENS = ["overview", "pull-requests", "settings"]
-THEMES = ["gh-dark", "gh-light"]
+SCREENS = ["workspace", "overview", "pull-requests", "settings"]
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="gh-tui",
         description="Your entire GitHub + Git + CI/CD workflow, in one terminal UI.",
-        epilog="Run with no arguments to open the dashboard.",
+        epilog="Run with no arguments to open the terminal workspace.",
     )
     p.add_argument("-v", "--version", action="version", version=f"gh-tui {__version__}")
     p.add_argument(
@@ -31,8 +30,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--theme",
         metavar="NAME",
-        choices=THEMES,
-        help=f"start with a specific theme ({', '.join(THEMES)})",
+        choices=None,
+        help="start with a specific built-in theme (see --list-themes)",
+    )
+    p.add_argument(
+        "--list-themes", action="store_true", help="list built-in color schemes and exit"
     )
     p.add_argument(
         "--screen",
@@ -81,6 +83,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check_updates:
         return check_updates()
+
+    if args.list_themes:
+        from themes import THEME_NAMES
+
+        print("\n".join(THEME_NAMES))
+        return 0
+
+    if args.theme:
+        from themes import THEME_NAMES
+
+        if args.theme not in THEME_NAMES:
+            build_parser().error(f"unknown theme {args.theme!r}; use --list-themes")
 
     # Imported lazily so `--help`/`--version` don't pay the TUI import cost.
     from app import GhTuiApp

@@ -1,7 +1,7 @@
 """SplashScreen — CLI-style boot screen.
 
 Shows the big ASCII wordmark, then ticks through a boot sequence with the braille loader
-before handing off to the dashboard. Any key (or the sequence finishing) continues.
+before handing off to the terminal workspace. Any key (or the sequence finishing) continues.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ STEPS = [
     "Fetching pull requests",
     "Reading CI / Actions status",
     "Scanning local git",
-    "Building dashboard",
+    "Opening workspace",
 ]
 
 
@@ -89,9 +89,9 @@ class SplashScreen(Screen):
             return
         self._done = True
         self._timer.stop()
-        from screens.overview import OverviewScreen
+        from screens.main import MainScreen
 
-        self.app.switch_screen(OverviewScreen())
+        self.app.switch_screen(MainScreen())
 
     def action_skip(self) -> None:
         self._finish()

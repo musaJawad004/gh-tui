@@ -12,13 +12,14 @@ Public API:
 See README.md for the token table and how to add a theme.
 """
 
-from .palettes import GH_DARK, GH_LIGHT, THEME_NAMES, THEMES
+from .palettes import GH_DARK, GH_FLOW, GH_LIGHT, THEME_NAMES, THEMES
 
-DEFAULT_THEME = "gh-dark"
+DEFAULT_THEME = "gh-flow"
 
 __all__ = [
     "DEFAULT_THEME",
     "GH_DARK",
+    "GH_FLOW",
     "GH_LIGHT",
     "THEMES",
     "THEME_NAMES",

@@ -1,7 +1,7 @@
 # Theming
 
-gh-tui ships **multiple themes** — light, dark, and extra color schemes — and lets users
-pick one in `config.yml`. This folder defines them.
+gh-tui ships **25 themes** — light, dark, restrained, and colorful schemes — selectable
+from the visual Settings picker, `ctrl+t`, or `--theme NAME`. This folder defines them.
 
 ## How it works (Textual model)
 
@@ -46,11 +46,12 @@ Every theme (light and dark) must define all of these so the UI stays legible in
 | `$diff-remove` | `-` deletions |
 | `$pr-open` / `$pr-merged` / `$pr-closed` / `$pr-draft` | PR state colors |
 
-## Built-in themes (planned)
+## Built-in themes
 
-- **gh-dark** (default) — dark navy, GitHub-like
-- **gh-light** — light variant
-- **dracula**, **nord**, **gruvbox-dark**, **solarized-light** — popular schemes
+Run `gh-tui --list-themes` for the authoritative list. It includes GitHub-inspired dark
+and light defaults plus Tokyo Night, Dracula, Nord, Gruvbox, Catppuccin, Solarized,
+One Dark, Monokai, Rosé Pine, Ayu, Night Owl, Everforest, Kanagawa, Synthwave, Material
+Ocean, and PaperColor variants.
 
 ## Add a theme
 
