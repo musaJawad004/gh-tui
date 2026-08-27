@@ -12,11 +12,18 @@ Public API:
 See README.md for the token table and how to add a theme.
 """
 
-from .palettes import GH_DARK, GH_LIGHT, THEMES
+from .palettes import GH_DARK, GH_LIGHT, THEME_NAMES, THEMES
 
 DEFAULT_THEME = "gh-dark"
 
-__all__ = ["DEFAULT_THEME", "GH_DARK", "GH_LIGHT", "THEMES", "register_themes"]
+__all__ = [
+    "DEFAULT_THEME",
+    "GH_DARK",
+    "GH_LIGHT",
+    "THEMES",
+    "THEME_NAMES",
+    "register_themes",
+]
 
 
 def register_themes(app) -> None:

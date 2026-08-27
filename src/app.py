@@ -9,14 +9,17 @@ from __future__ import annotations
 from textual.app import App
 from textual.binding import Binding
 
-from themes import DEFAULT_THEME, register_themes
+from themes import DEFAULT_THEME, THEME_NAMES, register_themes
 
 
 class GhTuiApp(App):
     CSS_PATH = "app.tcss"
     TITLE = "gh-tui"
 
+    # App-level bindings work from any screen (screen bindings for `quit` don't resolve
+    # to the app's action, which is why `q` didn't work before).
     BINDINGS = [
+        Binding("q", "quit", "Quit"),
         Binding("question_mark", "help", "Help"),
         Binding("ctrl+t", "cycle_theme", "Theme"),
     ]
@@ -26,7 +29,7 @@ class GhTuiApp(App):
         # Register + apply the theme here so its custom CSS variables ($border-dim,
         # $row-selected, ...) are defined when the stylesheet is first parsed.
         register_themes(self)
-        self.theme = theme if theme in ("gh-dark", "gh-light") else DEFAULT_THEME
+        self.theme = theme if theme in THEME_NAMES else DEFAULT_THEME
         self._start_screen = start_screen
         # App-wide settings (edited on the Settings screen).
         self.settings: dict = {
@@ -40,6 +43,9 @@ class GhTuiApp(App):
             "base_branch": "main",
         }
 
+    def action_quit(self) -> None:
+        self.exit()
+
     def action_help(self) -> None:
         from screens.help import HelpScreen
 
@@ -47,12 +53,12 @@ class GhTuiApp(App):
             self.push_screen(HelpScreen())
 
     def action_cycle_theme(self) -> None:
-        order = ["gh-dark", "gh-light"]
+        names = THEME_NAMES
         current = self.theme
-        self.theme = (
-            order[(order.index(current) + 1) % len(order)] if current in order else order[0]
-        )
+        i = names.index(current) if current in names else 0
+        self.theme = names[(i + 1) % len(names)]
         self.settings["theme"] = self.theme
+        self.notify(f"Theme: {self.theme}", timeout=1.5)
 
     def on_mount(self) -> None:
         from screens.overview import OverviewScreen

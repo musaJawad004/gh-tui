@@ -69,7 +69,8 @@ class OverviewScreen(Screen):
     #sidebar { width: 34; padding: 0; }
     #sidebar #brand { height: 5; border: round $border-dim; padding: 0 1; content-align: left middle; }
     #sidebar #menu { height: auto; border: round $border-dim; padding: 0 1; background: $background; }
-    #sidebar #shortcuts, #sidebar #statusp { height: auto; border: round $border-dim; padding: 0 1; }
+    #sidebar #shortcuts { height: auto; border: round $border-dim; padding: 0 1; }
+    #sidebar #statusp { height: 1fr; border: round $border-dim; padding: 0 1; }
 
     #menu > .option-list--option-highlighted { background: $primary; color: $background; text-style: bold; }
     #menu > .option-list--option-highlighted-hover { background: $primary; color: $background; }
@@ -82,7 +83,7 @@ class OverviewScreen(Screen):
     #panels { height: 1fr; }
     #center { width: 3fr; }
     #right { width: 2fr; }
-    .panel { border: round $border-dim; padding: 0 1; border-title-align: left; }
+    .panel { height: auto; border: round $border-dim; padding: 0 1; border-title-align: left; }
     .panel Static { padding: 0; }
     .grow { height: 1fr; }
     #activity { height: 9; }
@@ -95,8 +96,6 @@ class OverviewScreen(Screen):
     """
 
     BINDINGS = [
-        ("q", "quit", "Quit"),
-        ("ctrl+t", "cycle_theme", "Theme"),
         ("enter", "open_selected", "Open"),
         ("left", "focus_previous", "Prev panel"),
         ("right", "focus_next", "Next panel"),
@@ -144,7 +143,7 @@ class OverviewScreen(Screen):
                         )
                     with Vertical(id="right"):
                         yield Panel(
-                            "PULL REQUESTS (4)",
+                            "PULL REQUESTS (7)",
                             self._pr_list(),
                             classes="panel animate grow",
                             id="prs",
@@ -184,13 +183,6 @@ class OverviewScreen(Screen):
             panel.styles.animate("opacity", 1.0, duration=0.35, delay=0.03 * i, easing="out_cubic")
 
     # ---- actions ----
-
-    def action_cycle_theme(self) -> None:
-        order = ["gh-dark", "gh-light"]
-        current = self.app.theme
-        self.app.theme = (
-            order[(order.index(current) + 1) % len(order)] if current in order else order[0]
-        )
 
     def action_open_selected(self) -> None:
         menu = self.query_one("#menu", OptionList)
@@ -334,6 +326,22 @@ class OverviewScreen(Screen):
             ("✎", BLUE, "Fix payment retry logic", "#139 feat/payments", "3h ago"),
             ("✓", GREEN, "Bump dependencies", "main", "5h ago"),
             ("✎", GREEN, "feat: Add usage analytics", "#138 feat/analytics", "6h ago"),
+            ("✓", GREEN, "Merge pull request #137 from fix/mobile", "main", "8h ago"),
+            ("✎", BLUE, "Refactor auth middleware", "#136 feat/auth", "10h ago"),
+            ("⬆", BLUE, "Deploy Preview #142", "feat/oauth", "11h ago"),
+            ("✓", GREEN, "Tag release v2.4.0", "main", "12h ago"),
+            ("✎", BLUE, "Update dependencies lockfile", "main", "14h ago"),
+            ("✗", RED, "E2E flake on checkout step", "#134 develop", "16h ago"),
+            ("✓", GREEN, "Cache CI node_modules", "main", "18h ago"),
+            ("✎", GREEN, "docs: expand contributing guide", "#133 docs", "1d ago"),
+            ("✓", GREEN, "Merge pull request #132 from feat/search", "main", "1d ago"),
+            ("⬆", BLUE, "Deploy to Staging", "develop", "1d ago"),
+            ("✎", BLUE, "Add rate limiting to API", "#131 feat/api", "2d ago"),
+            ("✗", RED, "Lint failed on feature branch", "#130 feat/ui", "2d ago"),
+            ("✓", GREEN, "Bump actions/checkout to v4", "main", "2d ago"),
+            ("✎", GREEN, "test: add coverage for auth", "#129 tests", "3d ago"),
+            ("✓", GREEN, "Merge pull request #128 from chore/deps", "main", "3d ago"),
+            ("⬆", BLUE, "Rollback Production to v2.3.1", "main", "3d ago"),
         ]
         g = _grid(1, 1, 1)
         g.columns[1].justify = "left"
@@ -423,6 +431,30 @@ class OverviewScreen(Screen):
                 "✓ Approved",
                 "3h",
             ),
+            (
+                "#138",
+                "Add usage analytics",
+                "feat/analytics → main",
+                "✓ 4/4 checks",
+                "• 1 review",
+                "6h",
+            ),
+            (
+                "#137",
+                "Refactor auth middleware",
+                "feat/auth → main",
+                "✗ 5/6 checks",
+                "• 3 reviews",
+                "8h",
+            ),
+            (
+                "#136",
+                "Search across everything",
+                "feat/search → main",
+                "✓ 8/8 checks",
+                "✓ Approved",
+                "1d",
+            ),
         ]
         g = _grid(1, 1)
         g.columns[1].justify = "right"
@@ -432,7 +464,7 @@ class OverviewScreen(Screen):
             block.append(f"{title}\n")
             block.append(f"    {branch}\n", style="dim")
             block.append("    ")
-            block.append(checks + "   ", style=GREEN)
+            block.append(checks + "   ", style=GREEN if checks.startswith("✓") else RED)
             block.append(reviews, style="dim")
             g.add_row(block, Text(when, style="dim"))
             g.add_row(Text(""), Text(""))

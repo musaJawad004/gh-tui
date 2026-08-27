@@ -1,90 +1,86 @@
-"""palettes — color values + Theme objects for gh-tui.
+"""palettes — semantic colors + the built-in Theme objects for gh-tui.
 
-One source of truth: the *_COLORS dicts below drive both the Textual `Theme` (which powers
-CSS tokens like $background, $primary, $text-muted) and the handful of semantic colors used
-for inline Rich spans (repo names, diff +/-, CI dots). Switching theme restyles the
-CSS-driven parts automatically; the semantic colors below are chosen to read well on both
-light and dark backgrounds.
-
-See README.md in this folder for the token model and how to add a theme.
+Each theme drives Textual's CSS tokens ($background, $primary, $text-muted, $border-dim,
+$row-selected, ...). Switching theme restyles the whole UI instantly. THEME_SPECS below is
+a compact table; THEMES/THEME_NAMES are built from it.
 """
 
 from textual.theme import Theme
 
-# --- semantic colors (used for inline Rich spans; legible on light + dark) ---
-ACCENT_BLUE = "#4C9EEB"  # PR icon, active accents, "Open" badge
-REPO_PURPLE = "#8A91D6"  # repo names / usernames (link-ish)
-GREEN = "#3FB950"  # additions, CI pass
-RED = "#F85149"  # deletions, CI fail
-YELLOW = "#D29922"  # pending / queued
+# --- semantic colors (inline Rich spans; legible on light + dark) ---
+ACCENT_BLUE = "#4C9EEB"
+REPO_PURPLE = "#8A91D6"
+GREEN = "#3FB950"
+RED = "#F85149"
+YELLOW = "#D29922"
 
-GH_DARK_COLORS = {
-    "bg": "#0B0E14",
-    "surface": "#0F131A",
-    "panel": "#0F131A",
-    "fg": "#E6EDF3",
-    "muted": "#8B949E",
-    "primary": ACCENT_BLUE,
-    "repo": REPO_PURPLE,
-    "success": GREEN,
-    "error": RED,
-    "warning": YELLOW,
-    "accent": "#A371F7",
-    "border": "#1F2630",
-    "row_selected": "#18233A",
-    "tab_inactive": "#6E7681",
-}
-
-GH_LIGHT_COLORS = {
-    "bg": "#FFFFFF",
-    "surface": "#F6F8FA",
-    "panel": "#F6F8FA",
-    "fg": "#1F2328",
-    "muted": "#59636E",
-    "primary": "#0969DA",
-    "repo": "#5A4FCF",
-    "success": "#1A7F37",
-    "error": "#CF222E",
-    "warning": "#9A6700",
-    "accent": "#8250DF",
-    "border": "#D1D9E0",
-    "row_selected": "#DBEAFE",
-    "tab_inactive": "#818B98",
-}
+GH_DARK_COLORS = {"bg": "#0B0E14", "fg": "#E6EDF3", "muted": "#8B949E"}
+GH_LIGHT_COLORS = {"bg": "#FFFFFF", "fg": "#1F2328", "muted": "#59636E"}
 
 
-def _build(name: str, dark: bool, c: dict) -> Theme:
+# name, dark, bg, surface, fg, muted, primary, repo, success, warning, error, accent, border, sel
+THEME_SPECS = [
+    ("gh-dark", True, "#0B0E14", "#0F131A", "#E6EDF3", "#8B949E", "#4C9EEB", "#8A91D6", "#3FB950", "#D29922", "#F85149", "#A371F7", "#1F2630", "#18233A"),
+    ("gh-light", False, "#FFFFFF", "#F6F8FA", "#1F2328", "#59636E", "#0969DA", "#5A4FCF", "#1A7F37", "#9A6700", "#CF222E", "#8250DF", "#D1D9E0", "#DBEAFE"),
+    ("tokyo-night", True, "#1A1B26", "#24283B", "#C0CAF5", "#565F89", "#7AA2F7", "#BB9AF7", "#9ECE6A", "#E0AF68", "#F7768E", "#7DCFFF", "#2A2E42", "#2E3350"),
+    ("tokyo-storm", True, "#24283B", "#2A2E42", "#C0CAF5", "#565F89", "#7AA2F7", "#BB9AF7", "#9ECE6A", "#E0AF68", "#F7768E", "#7DCFFF", "#3B4261", "#343A55"),
+    ("dracula", True, "#282A36", "#343746", "#F8F8F2", "#6272A4", "#BD93F9", "#FF79C6", "#50FA7B", "#F1FA8C", "#FF5555", "#8BE9FD", "#44475A", "#44475A"),
+    ("nord", True, "#2E3440", "#3B4252", "#ECEFF4", "#7B88A1", "#88C0D0", "#B48EAD", "#A3BE8C", "#EBCB8B", "#BF616A", "#81A1C1", "#434C5E", "#434C5E"),
+    ("gruvbox-dark", True, "#282828", "#32302F", "#EBDBB2", "#928374", "#83A598", "#D3869B", "#B8BB26", "#FABD2F", "#FB4934", "#FE8019", "#3C3836", "#3C3836"),
+    ("gruvbox-light", False, "#FBF1C7", "#F2E5BC", "#3C3836", "#7C6F64", "#076678", "#8F3F71", "#79740E", "#B57614", "#9D0006", "#AF3A03", "#EBDBB2", "#EBDBB2"),
+    ("catppuccin-mocha", True, "#1E1E2E", "#302D41", "#CDD6F4", "#6C7086", "#89B4FA", "#CBA6F7", "#A6E3A1", "#F9E2AF", "#F38BA8", "#94E2D5", "#313244", "#313244"),
+    ("catppuccin-latte", False, "#EFF1F5", "#E6E9EF", "#4C4F69", "#8C8FA1", "#1E66F5", "#8839EF", "#40A02B", "#DF8E1D", "#D20F39", "#179299", "#CCD0DA", "#DCE0E8"),
+    ("solarized-dark", True, "#002B36", "#073642", "#93A1A1", "#586E75", "#268BD2", "#6C71C4", "#859900", "#B58900", "#DC322F", "#2AA198", "#094B58", "#094B58"),
+    ("solarized-light", False, "#FDF6E3", "#EEE8D5", "#586E75", "#93A1A1", "#268BD2", "#6C71C4", "#859900", "#B58900", "#DC322F", "#2AA198", "#E5DEC7", "#E5DEC7"),
+    ("one-dark", True, "#282C34", "#31353F", "#ABB2BF", "#5C6370", "#61AFEF", "#C678DD", "#98C379", "#E5C07B", "#E06C75", "#56B6C2", "#3B4048", "#3B4048"),
+    ("monokai", True, "#272822", "#31322C", "#F8F8F2", "#75715E", "#66D9EF", "#AE81FF", "#A6E22E", "#E6DB74", "#F92672", "#FD971F", "#3B3C35", "#3E3D32"),
+    ("rose-pine", True, "#191724", "#1F1D2E", "#E0DEF4", "#6E6A86", "#31748F", "#C4A7E7", "#9CCFD8", "#F6C177", "#EB6F92", "#EBBCBA", "#26233A", "#26233A"),
+    ("rose-pine-dawn", False, "#FAF4ED", "#FFFAF3", "#575279", "#9893A5", "#286983", "#907AA9", "#56949F", "#EA9D34", "#B4637A", "#D7827E", "#F2E9E1", "#F4EDE8"),
+    ("ayu-dark", True, "#0B0E14", "#131721", "#BFBDB6", "#565B66", "#59C2FF", "#D2A6FF", "#7FD962", "#FFB454", "#F26D78", "#95E6CB", "#1C222B", "#1C222B"),
+    ("ayu-mirage", True, "#1F2430", "#242936", "#CCCAC2", "#707A8C", "#73D0FF", "#DFBFFF", "#87D96C", "#FFD173", "#FF6666", "#95E6CB", "#2C3141", "#2C3141"),
+    ("night-owl", True, "#011627", "#0B2942", "#D6DEEB", "#637777", "#82AAFF", "#C792EA", "#22DA6E", "#FFEB95", "#EF5350", "#7FDBCA", "#0E3A5A", "#0E3A5A"),
+    ("everforest", True, "#2B3339", "#323C41", "#D3C6AA", "#859289", "#7FBBB3", "#D699B6", "#A7C080", "#DBBC7F", "#E67E80", "#83C092", "#3A464C", "#3A464C"),
+    ("kanagawa", True, "#1F1F28", "#2A2A37", "#DCD7BA", "#727169", "#7E9CD8", "#957FB8", "#98BB6C", "#E6C384", "#E82424", "#7FB4CA", "#2A2A37", "#363646"),
+    ("synthwave", True, "#241B2F", "#2A2139", "#F8F8F2", "#848077", "#36F9F6", "#FF7EDB", "#72F1B8", "#FEDE5D", "#FE4450", "#FF7EDB", "#34294F", "#34294F"),
+]
+
+
+def _build(spec) -> Theme:
+    name, dark, bg, surface, fg, muted, primary, repo, success, warning, error, accent, border, sel = spec
     return Theme(
         name=name,
         dark=dark,
-        primary=c["primary"],
-        secondary=c["repo"],
-        accent=c["accent"],
-        foreground=c["fg"],
-        background=c["bg"],
-        surface=c["surface"],
-        panel=c["panel"],
-        success=c["success"],
-        warning=c["warning"],
-        error=c["error"],
+        primary=primary,
+        secondary=repo,
+        accent=accent,
+        foreground=fg,
+        background=bg,
+        surface=surface,
+        panel=surface,
+        success=success,
+        warning=warning,
+        error=error,
         variables={
-            "diff-add": c["success"],
-            "diff-remove": c["error"],
-            "repo-name": c["repo"],
-            "row-selected": c["row_selected"],
-            "pr-open": c["primary"],
-            "border-dim": c["border"],
-            "tab-inactive": c["tab_inactive"],
+            "diff-add": success,
+            "diff-remove": error,
+            "repo-name": repo,
+            "row-selected": sel,
+            "pr-open": primary,
+            "border-dim": border,
+            "tab-inactive": muted,
         },
     )
 
 
-GH_DARK = _build("gh-dark", True, GH_DARK_COLORS)
-GH_LIGHT = _build("gh-light", False, GH_LIGHT_COLORS)
-
-THEMES = [GH_DARK, GH_LIGHT]
+THEMES = [_build(s) for s in THEME_SPECS]
+THEME_NAMES = [s[0] for s in THEME_SPECS]
+_BY_NAME = {t.name: t for t in THEMES}
+GH_DARK = _BY_NAME["gh-dark"]
+GH_LIGHT = _BY_NAME["gh-light"]
 
 
 def active_colors(app) -> dict:
-    """Return the raw color dict matching the app's current theme name."""
-    return GH_LIGHT_COLORS if getattr(app, "theme", "gh-dark") == "gh-light" else GH_DARK_COLORS
+    """Coarse light/dark color dict for inline Rich spans (theme-name based)."""
+    name = getattr(app, "theme", "gh-dark")
+    theme = _BY_NAME.get(name)
+    return GH_LIGHT_COLORS if (theme and not theme.dark) else GH_DARK_COLORS

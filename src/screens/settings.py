@@ -13,11 +13,12 @@ from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
 from themes.palettes import ACCENT_BLUE as BLUE
+from themes.palettes import THEME_NAMES
 from version import __version__
 
 # id -> ordered list of values it cycles through
 CYCLES: dict[str, list] = {
-    "theme": ["gh-dark", "gh-light"],
+    "theme": THEME_NAMES,
     "nerd_fonts": [False, True],
     "default_screen": ["overview", "pull-requests"],
     "auto_refresh": ["off", "15s", "30s", "60s"],
@@ -64,7 +65,6 @@ class SettingsScreen(Screen):
 
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
-        ("q", "quit", "Quit"),
     ]
 
     def compose(self) -> ComposeResult:

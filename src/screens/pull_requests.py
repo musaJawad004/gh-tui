@@ -80,8 +80,7 @@ def mock_pull_requests() -> list[PullRequest]:
 
 class HomeScreen(Screen):
     BINDINGS = [
-        ("q", "quit", "Quit"),
-        ("ctrl+t", "cycle_theme", "Theme"),
+        ("escape", "app.pop_screen", "Back"),
         ("j", "cursor_down", "Down"),
         ("k", "cursor_up", "Up"),
     ]
@@ -118,9 +117,3 @@ class HomeScreen(Screen):
 
     def action_cursor_up(self) -> None:
         self.query_one(PrTable).action_cursor_up()
-
-    def action_cycle_theme(self) -> None:
-        order = ["gh-dark", "gh-light"]
-        current = self.app.theme
-        nxt = order[(order.index(current) + 1) % len(order)] if current in order else order[0]
-        self.app.theme = nxt
