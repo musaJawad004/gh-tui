@@ -1,22 +1,25 @@
 """themes — the gh-tui theme registry.
 
-In Textual, a theme is a `Theme` object (a named set of colors + a `dark` flag), NOT a
-separate CSS file. The app's single stylesheet (`src/app.tcss`) references semantic tokens
-like `$primary`, `$surface`, `$success`; swapping `app.theme = "<name>"` re-resolves those
-tokens, and every widget restyles instantly.
+Themes are Textual `Theme` objects (a named color set + `dark` flag). The app's single
+stylesheet references semantic tokens ($primary, $surface, $success, ...); setting
+`app.theme = "<name>"` re-resolves them and restyles the whole UI instantly.
 
-Planned public API (to implement when we code):
+Public API:
+    THEMES              # all built-in themes
+    DEFAULT_THEME       # applied on first launch
+    register_themes(app)
 
-    THEMES: list[Theme]              # all built-in themes (see palettes.py)
-    def register_themes(app) -> None # app.register_theme(t) for t in THEMES
-    DEFAULT_THEME = "gh-dark"        # applied on first launch, overridable via config.yml
-
-Planned built-in themes (light + dark + extra color schemes):
-    gh-dark   (default), gh-light, dracula, nord, gruvbox-dark, solarized-light
-
-See README.md in this folder for the semantic token table and how to add a theme.
-
-TODO: define THEMES, register_themes(), DEFAULT_THEME.
-
-Status: stub — not implemented yet.
+See README.md for the token table and how to add a theme.
 """
+
+from .palettes import GH_DARK, GH_LIGHT, THEMES
+
+DEFAULT_THEME = "gh-dark"
+
+__all__ = ["DEFAULT_THEME", "GH_DARK", "GH_LIGHT", "THEMES", "register_themes"]
+
+
+def register_themes(app) -> None:
+    """Register every built-in theme on the Textual app."""
+    for theme in THEMES:
+        app.register_theme(theme)

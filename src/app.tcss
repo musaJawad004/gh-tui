@@ -1,21 +1,97 @@
-/* gh-tui — app-wide stylesheet (Textual CSS).
- *
- * Structure/layout only. Colors come from theme tokens ($primary, $surface, $success,
- * $diff-add, $row-selected, ...) defined in src/themes/. NEVER hardcode a hex here —
- * reference a token so all themes work.
- *
- * Stub — no rules defined yet.
- *
- * TODO (fill when we code):
- *   Screen            { layout: vertical; }
- *   TabBar            { dock: top; }
- *   StatusBar         { dock: bottom; }
- *   #main             { layout: horizontal; }          left list | right detail
- *   PrTable           { width: 1fr; }
- *   DetailPane        { width: 1fr; background: $panel; }
- *   PrTable > .row--selected { background: $row-selected; }
- *   .ci--pass         { color: $success; }
- *   .ci--fail         { color: $error; }
- *   .diff--add        { color: $diff-add; }
- *   .diff--remove     { color: $diff-remove; }
+/* gh-tui — app-wide stylesheet.
+ * Layout + theme-token colors ($background, $surface, $text-muted, $border-dim,
+ * $row-selected, $primary). Semantic inline colors (green/red/purple) live in the widgets.
  */
+
+Screen {
+    layout: vertical;
+    background: $background;
+    color: $foreground;
+}
+
+/* ---- top tab bar ---- */
+TabBar {
+    dock: top;
+    height: 1;
+    padding: 0 2;
+    background: $background;
+}
+TabBar #tabs {
+    width: 1fr;
+    content-align: left middle;
+}
+TabBar #version {
+    width: auto;
+    color: $text-muted;
+    content-align: right middle;
+}
+
+/* ---- body: list | detail ---- */
+#body {
+    height: 1fr;
+}
+#left {
+    width: 3fr;
+    height: 1fr;
+    border-right: solid $border-dim;
+}
+
+SearchBar {
+    height: 3;
+    margin: 1 1 0 1;
+    padding: 0 1;
+    border: round $border-dim;
+    color: $text-muted;
+    content-align: left middle;
+}
+
+PrTable {
+    height: 1fr;
+    margin: 1 0 0 0;
+    background: $background;
+    color: $foreground;
+    scrollbar-size-vertical: 1;
+}
+PrTable > .datatable--header {
+    background: $background;
+    color: $text-muted;
+    text-style: none;
+}
+PrTable > .datatable--cursor {
+    background: $row-selected;
+    color: $foreground;
+}
+PrTable > .datatable--hover {
+    background: $surface;
+}
+
+/* ---- detail pane ---- */
+DetailPane {
+    width: 2fr;
+    height: 1fr;
+    padding: 1 3;
+    background: $background;
+    color: $foreground;
+}
+DetailPane #d-title { margin-top: 1; }
+DetailPane #d-badge { margin-top: 1; }
+DetailPane #d-meta { margin-top: 1; }
+DetailPane #d-tabs { margin-top: 1; }
+DetailPane #d-summary-h { margin-top: 2; }
+DetailPane #d-changes-h { margin-top: 2; }
+DetailPane #d-commits { margin-top: 1; }
+DetailPane .card {
+    width: 1fr;
+    margin: 1 0 0 0;
+    padding: 1 2;
+    border: round $border-dim;
+}
+
+/* ---- bottom status bar ---- */
+StatusBar {
+    dock: bottom;
+    height: 1;
+    padding: 0 1;
+    background: $surface;
+    color: $text-muted;
+}

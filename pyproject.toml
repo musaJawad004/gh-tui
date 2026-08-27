@@ -45,7 +45,7 @@ Issues = "https://github.com/musaJawad004/gh-tui/issues"
 # Run in dev with:  python src/            (executes src/__main__.py)
 # Installed script:
 [project.scripts]
-gh-tui = "app:main"
+gh-tui = "cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -60,6 +60,11 @@ only-include = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# Textual reads BINDINGS / CSS as class attributes by design; the mutable-default
+# warning (RUF012) is a false positive for this framework.
+ignore = ["RUF012"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

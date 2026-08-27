@@ -11,7 +11,7 @@ A theme is **not** a separate CSS file. It's a `Theme` object: a named set of co
 those tokens and every widget restyles instantly:
 
 ```python
-app.theme = "dracula"   # done — no CSS reload, no per-widget code
+app.theme = "dracula"  # done — no CSS reload, no per-widget code
 ```
 
 So: **colors live here, layout/structure lives in `src/app.tcss`.** Never hardcode a hex

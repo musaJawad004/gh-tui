@@ -1,6 +1,8 @@
-"""CLI entry point. Defines main() referenced by the gh-tui console script.
+"""Entry point so `python src/` launches gh-tui (via the CLI)."""
 
-TODO: parse args, build App, run it
+import sys
 
-Status: stub — not implemented yet.
-"""
+from cli import main
+
+if __name__ == "__main__":
+    sys.exit(main())
