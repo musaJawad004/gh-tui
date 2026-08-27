@@ -699,23 +699,20 @@ class MainScreen(Screen):
         steps.add_column(width=3)
         steps.add_column(ratio=1)
         steps.add_column(width=10, justify="right")
-        for icon, label, value, color in (
-            ("✓", "checkout", "8s", "success"),
-            ("✓", "setup python 3.12", "12s", "success"),
-            ("✓", "install dependencies", "42s", "success"),
-            ("×", "pytest", "3m 02s", "error"),
-            ("–", "upload coverage", "skipped", "muted"),
-        ):
+        selected_run = self.app.github_snapshot.workflows[selected] if self.app.github_snapshot and selected < len(self.app.github_snapshot.workflows) else {}
+        workflow_detail = self.app.detail_data if self.app.detail_data and self.app.detail_data.get("id") == (selected_run.get("id") or selected_run.get("databaseId")) else None
+        job_rows = []
+        for job in (workflow_detail or {}).get("jobs_data", []):
+            state = (job.get("conclusion") or job.get("status") or "queued").lower()
+            job_rows.append(("✓" if state == "success" else "×" if state in {"failure", "cancelled"} else "○", job.get("name", "job"), state, "success" if state == "success" else "error" if state in {"failure", "cancelled"} else "warning"))
+        if not job_rows:
+            job_rows = [("·", "Open the workflow to load jobs", "not loaded", "muted")] if self.app.github_snapshot is not None else [("✓", "checkout", "8s", "success")]
+        for icon, label, value, color in job_rows:
             steps.add_row(Text(icon, style=self._c(color)), Text(label), Text(value, style="dim"))
         logs = Text()
         logs.append(f"workflow/{name.replace(' ', '-')} ", style="dim")
         logs.append(f"{state.upper()}\n", style=self._c(state_color))
-        logs.append(
-            "AssertionError: state cookie was not restored\n"
-            if state == "failed"
-            else "All configured steps completed without errors.\n",
-            style=self._c(state_color),
-        )
+        logs.append("Run details loaded from GitHub; logs are available through the run URL.\n" if workflow_detail else "Open the workflow to load jobs and logs.\n", style="dim")
         logs.append(f"selected run finished in {duration}", style="dim")
         right = Group(
             header,
@@ -1031,6 +1028,12 @@ class MainScreen(Screen):
 
     def action_open_detail(self) -> None:
         self._show_pane("detail")
+        if self._section == 2 and self.app.github_snapshot:
+            rows = self.app.github_snapshot.workflows
+            if rows:
+                run_id = rows[min(self._selection(), len(rows) - 1)].get("databaseId") or rows[min(self._selection(), len(rows) - 1)].get("id")
+                if run_id:
+                    self.app.begin_detail_load("workflow", int(run_id))
         if self._section in {0, 1}:
             rows = self.app.github_snapshot.pr_rows() if self._section == 0 and self.app.github_snapshot else []
             if self._section == 1 and self.app.github_snapshot:

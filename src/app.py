@@ -20,6 +20,7 @@ from core.github_data import (
     load_issue_detail,
     load_pull_request_detail,
     load_snapshot,
+    load_workflow_detail,
     parse_repository_url,
 )
 from themes import DEFAULT_THEME, THEME_NAMES, register_themes
@@ -191,7 +192,7 @@ class GhTuiApp(App):
 
     def _load_detail(self, kind: str, number: int) -> None:
         try:
-            loader = load_pull_request_detail if kind == "pr" else load_issue_detail
+            loader = {"pr": load_pull_request_detail, "issue": load_issue_detail, "workflow": load_workflow_detail}[kind]
             detail = loader(self.repository, number, cwd=Path.cwd())
         except GhCliError as exc:
             self.call_from_thread(self._detail_failed, str(exc))
