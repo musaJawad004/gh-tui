@@ -404,6 +404,22 @@ class MainScreen(Screen):
 
     def _section_analytics(self):
         """Return a distinct bottom-anchored visualization for the active section."""
+        snapshot = self.app.github_snapshot
+        if snapshot is not None:
+            if self._section == 0:
+                count = len(snapshot.pull_requests)
+                return self._analytics(("open pull requests", (count,), f"{count} open", "primary"), ("pull request state", (count, 0, 0), f"{count} open · 0 merged · 0 closed", "primary"))
+            if self._section == 1:
+                count = len(snapshot.issues)
+                return Panel(donut_chart((count, 0, 0), f"{count} tracked issues", (self._c("warning"), self._c("success"), self._c("error")), width=25, height=11, labels=("open", "closed", "blocked")), title="issue distribution", border_style=self._c("border"))
+            if self._section == 2:
+                passed = sum((item.get("conclusion") or "").lower() == "success" for item in snapshot.workflows)
+                failed = sum((item.get("conclusion") or "").lower() in {"failure", "cancelled"} for item in snapshot.workflows)
+                running = max(0, len(snapshot.workflows) - passed - failed)
+                return Panel(horizontal_bars(("passed", "failed", "running"), (passed, failed, running), (self._c("success"), self._c("error"), self._c("warning")), f"{len(snapshot.workflows)} workflow runs", width=42, row_spacing=1), title="workflow outcomes", border_style=self._c("border"), padding=(0, 1))
+            if self._section == 3:
+                return Panel(Text(f"{len(snapshot.branches)} branches\n{len(snapshot.repositories)} repositories\n{len(snapshot.releases)} releases", style=self._c("primary")), title="repository activity", border_style=self._c("border"), padding=(1, 2))
+            return Panel(Text(f"{len(snapshot.commits)} commits fetched\nread-only activity", style=self._c("success")), title="commit contributions", border_style=self._c("border"), padding=(1, 2))
         navigator_ratio = 0.36 if self.size.width >= 180 and self.size.height >= 50 else 0.40
         width = max(30, int(self.size.width * navigator_ratio) - 6)
         if self._section == 0:

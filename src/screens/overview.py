@@ -436,8 +436,9 @@ class OverviewScreen(Screen):
         if min(success.size.width, state.size.width, commits.size.width) <= 0:
             return
 
-        plot_width = max(24, success.size.width - 8)
-        plot_height = max(5, success.size.height - 4)
+        # Stable geometry prevents charts jumping when the worker replaces loading text.
+        plot_width = 34
+        plot_height = 9
         snapshot = self.app.github_snapshot
         if self.app.data_loading:
             success.update(Text("Loading workflow data…", style=self._c("primary")))
@@ -455,15 +456,13 @@ class OverviewScreen(Screen):
         else:
             success.update(Text("No workflow data\n\nRun refresh after connecting gh.", style="dim"))
 
-        donut_height = max(7, state.size.height - 2)
-        if donut_height % 2 == 0:
-            donut_height -= 1
-        donut_width = min(state.size.width - 2, donut_height * 2 + 1)
+        donut_height = 9
+        donut_width = 21
         if snapshot is not None:
             open_count = len(snapshot.pull_requests) + len(snapshot.issues)
             state.update(donut_chart((open_count, len(snapshot.commits), len(snapshot.workflows)), f"{open_count + len(snapshot.commits) + len(snapshot.workflows)} fetched items", (self._c("primary"), self._c("success"), self._c("warning")), width=donut_width, height=donut_height, labels=("open", "commits", "runs")))
             if snapshot.commits:
-                commits.update(contribution_calendar(f"{len(snapshot.commits)} commits  ·  {self.app.repository}", self._c("warning"), width=max(28, commits.size.width - 2), height=max(9, commits.size.height)))
+                commits.update(contribution_calendar(f"{len(snapshot.commits)} commits  ·  {self.app.repository}", self._c("warning"), width=42, height=11))
             else:
                 commits.update(Text("No commits data\n\nNo commits were returned for this repository.", style="dim"))
 

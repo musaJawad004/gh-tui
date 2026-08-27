@@ -69,7 +69,9 @@ class SplashScreen(Screen):
         self._frame += 1
         if self._frame % 4 == 0:
             self._step += 1
-        if self._step >= len(STEPS):
+        # The splash is the data-loading gate: never reveal a dashboard populated
+        # with placeholders while the read-only GitHub worker is still running.
+        if self._step >= len(STEPS) and not self.app.data_loading:
             self._finish()
             return
         self._render_steps()
