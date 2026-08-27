@@ -9,7 +9,7 @@ from textual.containers import Center, Middle
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
-from themes.palettes import ACCENT_BLUE as BLUE
+from themes.palettes import active_colors
 
 BINDINGS_HELP = [
     ("Navigation", ""),
@@ -51,10 +51,11 @@ class HelpScreen(ModalScreen):
             yield Static(self._body(), id="card")
 
     def _body(self):
+        blue = active_colors(self.app)["primary"]
         table = Table.grid(padding=(0, 2))
         table.add_column(justify="right", no_wrap=True)
         table.add_column()
-        title = Text("gh-tui — keyboard shortcuts", style=f"bold {BLUE}")
+        title = Text("gh-tui — keyboard shortcuts", style=f"bold {blue}")
         table.add_row("", title)
         table.add_row("", "")
         for key, desc in BINDINGS_HELP:
@@ -63,7 +64,7 @@ class HelpScreen(ModalScreen):
             elif desc == "":
                 table.add_row("", Text(key, style="bold"))
             else:
-                table.add_row(Text(key, style=BLUE), Text(desc, style="dim"))
+                table.add_row(Text(key, style=blue), Text(desc, style="dim"))
         table.add_row("", "")
         table.add_row("", Text("press esc to close", style="dim"))
         return table

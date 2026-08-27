@@ -11,7 +11,7 @@ from textual.widgets import DataTable
 
 import icons
 from models.pull_request import PullRequest, humanize_count
-from themes.palettes import ACCENT_BLUE, GREEN, RED, REPO_PURPLE, YELLOW
+from themes.palettes import active_colors
 
 
 class PrTable(DataTable):
@@ -38,24 +38,25 @@ class PrTable(DataTable):
             self.add_row(*self._cells(pr), height=2, key=f"{pr.repo}#{pr.number}")
 
     def _cells(self, pr: PullRequest) -> list[Text]:
-        icon = Text(icons.PR, style=ACCENT_BLUE)
+        colors = active_colors(self.app)
+        icon = Text(icons.PR, style=colors["primary"])
 
         title = Text()
-        title.append(pr.repo + "\n", style=REPO_PURPLE)
+        title.append(pr.repo + "\n", style=colors["secondary"])
         title.append(pr.title)
 
-        rev = Text(icons.APPROVED, style=GREEN) if pr.reviewers_ok else Text("")
+        rev = Text(icons.APPROVED, style=colors["success"]) if pr.reviewers_ok else Text("")
 
         if pr.ci == "pass":
-            ci = Text(icons.CI_PASS, style=GREEN)
+            ci = Text(icons.CI_PASS, style=colors["success"])
         elif pr.ci == "fail":
-            ci = Text(icons.CI_FAIL, style=RED)
+            ci = Text(icons.CI_FAIL, style=colors["error"])
         else:
-            ci = Text(icons.CI_PENDING, style=YELLOW)
+            ci = Text(icons.CI_PENDING, style=colors["warning"])
 
         diff = Text()
-        diff.append(f"+{humanize_count(pr.additions)} ", style=GREEN)
-        diff.append(f"-{humanize_count(pr.deletions)}", style=RED)
+        diff.append(f"+{humanize_count(pr.additions)} ", style=colors["success"])
+        diff.append(f"-{humanize_count(pr.deletions)}", style=colors["error"])
 
         upd = Text(pr.updated, style="dim")
         cre = Text(pr.created, style="dim")
