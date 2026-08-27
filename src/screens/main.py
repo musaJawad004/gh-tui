@@ -11,6 +11,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.events import Resize
 from textual.screen import Screen
@@ -18,8 +19,12 @@ from textual.widgets import Static, TextArea
 
 from themes.palettes import active_colors
 from widgets.spinner import indeterminate_bar, inline_loader, spinner_frame
+from widgets.terminal_charts import donut_chart, line_plot
 
 SECTIONS = ["Pull Requests", "Issues", "CI / CD", "Repos", "Commits"]
+PR_IDS = ("#142", "#141", "#140", "#139")
+ISSUE_IDS = ("#87", "#85", "#84", "#80", "#78")
+LOCAL_MENTIONS = ("@musa", "@dlvhdr", "@sarah", "@reviewers")
 
 
 def _grid(*ratios: int, padding: tuple[int, int] = (0, 1)) -> Table:
@@ -37,6 +42,9 @@ class CommentEditor(TextArea):
     def on_click(self) -> None:
         self.can_focus = True
         self.focus()
+
+    def on_blur(self) -> None:
+        self.can_focus = False
 
 
 class MainScreen(Screen):
@@ -145,6 +153,8 @@ class MainScreen(Screen):
         ("escape", "back_to_list", "Back"),
         ("o", "overview", "Overview"),
         ("g", "settings", "Settings"),
+        Binding("ctrl+s", "save_comment", "Save local", priority=True),
+        Binding("ctrl+m", "insert_mention", "Mention", priority=True),
     ]
 
     def __init__(self, section: int = 0) -> None:
@@ -165,7 +175,10 @@ class MainScreen(Screen):
                     show_line_numbers=False,
                     id="comment-editor",
                 )
-                yield Static("Markdown · draft saved locally · no submission yet", id="comment-hint")
+                yield Static(
+                    "[e/click] edit · [esc] done · [ctrl+s] save local · [ctrl+m] @mention",
+                    id="comment-hint",
+                )
         yield Static(id="status")
         yield Static(id="too-small")
 
@@ -178,7 +191,7 @@ class MainScreen(Screen):
         self._item_counts = [4, 5, 6, 5, 8]
         self._pane = "list"
         self._animation_frame = 0
-        self._comment_drafts: dict[tuple[int, int], str] = {}
+        self._mention_index = 0
         self.add_class("list-pane")
         self._apply_breakpoints(self.size.width, self.size.height)
         self._render_workspace()
@@ -240,13 +253,22 @@ class MainScreen(Screen):
         self.query_one("#status", Static).update(status)
         self._configure_comment_editor()
 
-    def _draft_key(self) -> tuple[int, int]:
-        return self._section, self._selection()
+    def _draft_key(self) -> str:
+        """Use repository + GitHub number so drafts survive sorting and restarts."""
+        identifiers = PR_IDS if self._section == 0 else ISSUE_IDS
+        identifier = identifiers[min(self._selection(), len(identifiers) - 1)]
+        kind = "pr" if self._section == 0 else "issue"
+        return f"{kind}:musa/my-app:{identifier}"
 
     def _save_comment_draft(self) -> None:
         if self._section in {0, 1}:
             editor = self.query_one("#comment-editor", TextArea)
-            self._comment_drafts[self._draft_key()] = editor.text
+            key = self._draft_key()
+            if editor.text:
+                self.app.comment_drafts[key] = editor.text
+            else:
+                self.app.comment_drafts.pop(key, None)
+            self.app.persist_comment_drafts()
 
     def _configure_comment_editor(self) -> None:
         editor = self.query_one("#comment-editor", TextArea)
@@ -260,13 +282,31 @@ class MainScreen(Screen):
                 if self._section == 0
                 else "Write an issue reply…"
             )
-            draft = self._comment_drafts.get(self._draft_key(), "")
+            draft = self.app.comment_drafts.get(self._draft_key(), "")
             if editor.text != draft:
                 editor.load_text(draft)
+            self._update_comment_hint(editor.text)
 
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
         if event.text_area.id == "comment-editor" and self._section in {0, 1}:
-            self._comment_drafts[self._draft_key()] = event.text_area.text
+            key = self._draft_key()
+            if event.text_area.text:
+                self.app.comment_drafts[key] = event.text_area.text
+            else:
+                self.app.comment_drafts.pop(key, None)
+            self.app.persist_comment_drafts()
+            self._update_comment_hint(event.text_area.text)
+
+    def _update_comment_hint(self, text: str) -> None:
+        hint = self.query_one("#comment-hint", Static)
+        prefix = text.rsplit("@", 1)[-1].lower() if "@" in text else ""
+        matches = [name for name in LOCAL_MENTIONS if not prefix or name[1:].startswith(prefix)]
+        if "@" in text and matches:
+            hint.update("local mentions: " + "  ".join(matches) + "  ·  [ctrl+m] insert")
+        else:
+            hint.update(
+                "[e/click] edit · [esc] done · [ctrl+s] save local · [ctrl+m] @mention"
+            )
 
     def _render_header(self) -> None:
         line = Text()
@@ -290,21 +330,46 @@ class MainScreen(Screen):
         content.append(f"   {hint}", style="dim")
         return Panel(content, border_style=self._c("border"), padding=(0, 1))
 
-    def _analytics(self, first: tuple, second: tuple) -> Table:
-        table = _grid(1, 1, padding=(0, 1))
-        table.add_row(self._chart(*first), self._chart(*second))
-        return table
-
-    def _chart(self, title: str, values: tuple[int, ...], summary: str, color: str) -> Panel:
-        blocks = "▁▂▃▄▅▆▇█"
-        peak = max(values) or 1
-        chart = Text()
-        for value in values:
-            index = min(7, round((value / peak) * 7))
-            chart.append(blocks[index], style=self._c(color))
-            chart.append(" ")
-        chart.append(f"\n{summary}", style="dim")
-        return Panel(chart, title=title, border_style=self._c("border"), padding=(0, 1))
+    def _analytics(self, first: tuple, second: tuple) -> Panel:
+        compact = self.size.height < 38
+        navigator_ratio = 0.36 if self.size.width >= 180 and self.size.height >= 50 else 0.40
+        navigator_width = int(self.size.width * navigator_ratio)
+        chart_space = max(35, navigator_width - 8)
+        line_space = round(chart_space * 0.60)
+        donut_space = chart_space - line_space
+        plot_width = max(16, min(42, line_space - 6))
+        donut_width = max(13, min(21, donut_space - 2))
+        plot_height = 4 if compact else 6
+        table = _grid(3, 2, padding=(0, 2))
+        first_title, first_values, first_summary, first_color = first
+        second_title, second_values, second_summary, second_color = second
+        left = Group(
+            Text(first_title, style=f"bold {self._c('primary')}"),
+            line_plot(
+                first_values,
+                first_summary,
+                self._c(first_color),
+                width=plot_width,
+                height=plot_height,
+            ),
+        )
+        right = Group(
+            Text(second_title, style=f"bold {self._c('primary')}"),
+            donut_chart(
+                second_values,
+                second_summary,
+                (
+                    self._c(second_color),
+                    self._c("success"),
+                    self._c("warning"),
+                    self._c("error"),
+                ),
+                width=donut_width,
+                height=7 if compact else 9,
+            ),
+        )
+        table.add_row(left, right)
+        return Panel(table, title="analytics", border_style=self._c("border"), padding=(0, 1))
 
     def _pull_requests(self):
         rows = [
@@ -685,14 +750,18 @@ class MainScreen(Screen):
                 result.append("  ·  ", style="dim")
             result.append(item, style=self._c("primary") if index == 0 else "dim")
         controls = (
-            "   [j/k] select  [enter] detail  [e] comment  [tab] section  [q] quit"
+            "   [j/k] select  [enter] detail  [e] edit  [esc] done  [q] quit"
             if self.size.width < 110
-            else "     [j/k] select  [enter] detail  [e] comment  [tab] section  [←/→] pane  [o] overview  [q] quit"
+            else "     [j/k] select  [enter] detail  [e] edit  [esc] done  [ctrl+s] local save  [tab] section  [o] overview  [q] quit"
         )
         result.append(controls, style="dim")
         return result
 
     def _set_section(self, section: int) -> None:
+        self._save_comment_draft()
+        editor = self.query_one("#comment-editor", CommentEditor)
+        if editor.has_focus:
+            editor.blur()
         self._section = section % len(SECTIONS)
         if self.has_class("single-pane"):
             self._show_pane("list")
@@ -744,11 +813,13 @@ class MainScreen(Screen):
         self._set_section(self._section - 1)
 
     def action_selection_down(self) -> None:
+        self._save_comment_draft()
         count = self._item_counts[self._section]
         self._selected[self._section] = (self._selection() + 1) % count
         self._render_workspace()
 
     def action_selection_up(self) -> None:
+        self._save_comment_draft()
         count = self._item_counts[self._section]
         self._selected[self._section] = (self._selection() - 1) % count
         self._render_workspace()
@@ -768,6 +839,21 @@ class MainScreen(Screen):
         editor = self.query_one("#comment-editor", CommentEditor)
         editor.can_focus = True
         editor.focus()
+
+    def action_save_comment(self) -> None:
+        if self._section not in {0, 1}:
+            return
+        self._save_comment_draft()
+        self.notify("Draft saved locally · nothing sent to GitHub", timeout=1.5)
+
+    def action_insert_mention(self) -> None:
+        if self._section not in {0, 1}:
+            return
+        self.action_focus_comment()
+        editor = self.query_one("#comment-editor", CommentEditor)
+        mention = LOCAL_MENTIONS[self._mention_index % len(LOCAL_MENTIONS)]
+        self._mention_index += 1
+        editor.insert(mention + " ")
 
     def action_back_to_list(self) -> None:
         editor = self.query_one("#comment-editor", TextArea)

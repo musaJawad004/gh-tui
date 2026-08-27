@@ -12,6 +12,7 @@ from textual.app import App
 from textual.binding import Binding
 
 from config import load_settings, save_settings
+from core.drafts import load_drafts, save_drafts
 from themes import DEFAULT_THEME, THEME_NAMES, register_themes
 
 
@@ -32,13 +33,16 @@ class GhTuiApp(App):
         theme: str | None = None,
         start_screen: str | None = None,
         config_path: Path | None = None,
+        drafts_path: Path | None = None,
     ) -> None:
         super().__init__()
         # Register + apply the theme here so its custom CSS variables ($border-dim,
         # $row-selected, ...) are defined when the stylesheet is first parsed.
         register_themes(self)
         self._config_path = config_path
+        self._drafts_path = drafts_path
         self.settings = load_settings(config_path)
+        self.comment_drafts = load_drafts(drafts_path)
         saved_theme = self.settings.get("theme")
         requested_theme = theme if theme in THEME_NAMES else saved_theme
         self.theme = requested_theme if requested_theme in THEME_NAMES else DEFAULT_THEME
@@ -47,12 +51,21 @@ class GhTuiApp(App):
 
     def action_quit(self) -> None:
         self.persist_settings()
+        self.persist_comment_drafts()
         self.exit()
 
     def persist_settings(self) -> bool:
         """Save settings without allowing a filesystem problem to crash the TUI."""
         try:
             save_settings(self.settings, self._config_path)
+        except OSError:
+            return False
+        return True
+
+    def persist_comment_drafts(self) -> bool:
+        """Save local drafts without allowing a cache problem to crash the TUI."""
+        try:
+            save_drafts(self.comment_drafts, self._drafts_path)
         except OSError:
             return False
         return True

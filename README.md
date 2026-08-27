@@ -100,6 +100,10 @@ compact section switcher, one data table, one selected-item context line, and on
 line. Use `1`–`5` or `tab` to change sections, `j`/`k` to move, `enter` to inspect an item,
 and `o` to open the optional overview.
 
+PR and issue composers currently save **local-only drafts**; they do not submit anything
+to GitHub or store data on a server. See [`LOCAL_DRAFTS.md`](LOCAL_DRAFTS.md) for cache
+location, privacy behavior, `@mention` assistance, and keyboard controls.
+
 ## Themes
 
 There are 25 built-in light, dark, minimal, and colorful schemes. Colors are semantic

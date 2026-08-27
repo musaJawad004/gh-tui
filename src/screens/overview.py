@@ -18,6 +18,7 @@ from textual.widgets import Static
 
 from themes.palettes import active_colors
 from widgets.spinner import indeterminate_bar, inline_loader
+from widgets.terminal_charts import donut_chart, line_plot
 
 
 def _grid(*ratios: int, padding: tuple[int, int] = (0, 1)) -> Table:
@@ -68,7 +69,7 @@ class OverviewScreen(Screen):
     }
 
     OverviewScreen #activity {
-        height: 11;
+        height: 10;
         padding: 1 1 0 1;
         overflow: hidden hidden;
     }
@@ -76,7 +77,7 @@ class OverviewScreen(Screen):
     OverviewScreen #activity-list { height: auto; }
 
     OverviewScreen #panels {
-        height: 13;
+        height: 10;
         overflow: hidden hidden;
     }
     OverviewScreen .dashboard-panel {
@@ -95,7 +96,7 @@ class OverviewScreen(Screen):
 
     OverviewScreen #analytics {
         height: 1fr;
-        min-height: 7;
+        min-height: 12;
         margin-top: 1;
     }
     OverviewScreen #analytics .dashboard-panel { width: 1fr; margin-right: 1; }
@@ -103,19 +104,19 @@ class OverviewScreen(Screen):
     OverviewScreen #analytics .dashboard-panel Static { content-align: center middle; }
 
     OverviewScreen #quick-panel {
-        height: 4;
+        height: 3;
         min-height: 3;
         margin-top: 1;
     }
     OverviewScreen #command-line {
-        height: 3;
+        height: 2;
         margin-top: 1;
         border: round $border-dim;
         padding: 0 1;
         content-align: left middle;
     }
     OverviewScreen #footer {
-        height: 2;
+        height: 1;
         padding: 0 1;
         color: $text-muted;
         content-align: left middle;
@@ -184,7 +185,10 @@ class OverviewScreen(Screen):
             )
             yield DashboardPanel(
                 "open vs completed",
-                self._home_chart((4, 7, 18, 24, 3, 5), "PR 4/18  ·  Issues 7/24", "primary"),
+                self._home_donut(
+                    (11, 42, 7),
+                    "11 open  ·  42 completed  ·  7 blocked",
+                ),
                 id="state-chart",
                 classes="dashboard-panel",
             )
@@ -364,14 +368,16 @@ class OverviewScreen(Screen):
         return result
 
     def _home_chart(self, values: tuple[int, ...], summary: str, color: str) -> Text:
-        blocks = "▁▂▃▄▅▆▇█"
-        peak = max(values) or 1
-        result = Text(justify="center")
-        for value in values:
-            result.append(blocks[min(7, round((value / peak) * 7))], style=self._c(color))
-            result.append("  ")
-        result.append(f"\n{summary}", style="dim")
-        return result
+        return line_plot(values, summary, self._c(color), width=28, height=5)
+
+    def _home_donut(self, values: tuple[int, ...], summary: str) -> Text:
+        return donut_chart(
+            values,
+            summary,
+            (self._c("primary"), self._c("success"), self._c("warning")),
+            width=25,
+            height=7,
+        )
 
     def _command_line(self) -> Table:
         table = _grid(1, 1, padding=(0, 0))
