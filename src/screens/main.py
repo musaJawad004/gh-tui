@@ -85,8 +85,8 @@ class MainScreen(Screen):
         overflow: hidden hidden;
         background: $background;
     }
-    MainScreen #navigator-content { height: 1fr; overflow: hidden hidden; }
-    MainScreen #navigator-analytics { height: auto; }
+    MainScreen #navigator-content { height: 1fr; overflow-y: auto; overflow-x: hidden; }
+    MainScreen #navigator-analytics { height: 14; min-height: 14; overflow: hidden hidden; }
     MainScreen #detail {
         width: 58%;
         height: 1fr;
@@ -271,6 +271,10 @@ class MainScreen(Screen):
             self._commits,
         ]
         left, right, status = renderers[self._section]()
+        snapshot = self.app.github_snapshot
+        if snapshot is not None:
+            counts = [len(snapshot.pull_requests), len(snapshot.issues), len(snapshot.workflows), 1, len(snapshot.commits)]
+            self._item_counts[self._section] = max(1, counts[self._section])
         self.query_one("#navigator-content", Static).update(left)
         self.query_one("#navigator-analytics", Static).update(self._section_analytics())
         self.query_one("#detail-content", Static).update(right)
@@ -355,15 +359,9 @@ class MainScreen(Screen):
         return Panel(content, border_style=self._c("border"), padding=(0, 1))
 
     def _analytics(self, first: tuple, second: tuple) -> Panel:
-        compact = self.size.height < 38
-        navigator_ratio = 0.36 if self.size.width >= 180 and self.size.height >= 50 else 0.40
-        navigator_width = int(self.size.width * navigator_ratio)
-        chart_space = max(35, navigator_width - 8)
-        line_space = round(chart_space * 0.60)
-        donut_space = chart_space - line_space
-        plot_width = max(16, min(42, line_space - 6))
-        donut_width = max(13, min(21, donut_space - 2))
-        plot_height = 6 if compact else 8
+        plot_width = 28
+        donut_width = 21
+        plot_height = 7
         table = _grid(3, 2, padding=(0, 2))
         first_title, first_values, first_summary, first_color = first
         second_title, second_values, second_summary, second_color = second
@@ -395,7 +393,7 @@ class MainScreen(Screen):
                     self._c("error"),
                 ),
                 width=donut_width,
-                height=7 if compact else 9,
+                height=9,
                 labels=legend_labels,
             ),
         )
@@ -522,7 +520,7 @@ class MainScreen(Screen):
 
         number, title, branch, _ci, checks, changes, age = rows[selected]
         meta = Text()
-        meta.append(f"musa/my-app  ·  {number}\n", style=self._c("primary"))
+        meta.append(f"{self.app.repository or 'repository'}  ·  {number}\n", style=self._c("primary"))
         meta.append(f"{title}\n", style="bold")
         meta.append("\n OPEN ", style=f"bold {self._c('background')} on {self._c('primary')}")
         meta.append(f"  {branch} → main  ·  by @musa  ·  {age} ago\n", style="dim")
@@ -534,12 +532,17 @@ class MainScreen(Screen):
         added, removed = changes.split("  ")
         summary.append(f"{added} additions   ", style=self._c("success"))
         summary.append(f"{removed} deletions   ", style=self._c("error"))
-        summary.append("8 files changed", style="dim")
+        files_changed = next((item.get("changedFiles") for item in (self.app.github_snapshot.pull_requests if self.app.github_snapshot else []) if f"#{item.get('number')}" == number), 0)
+        summary.append(f"{files_changed or 0} files changed", style="dim")
 
         comment = Text()
-        comment.append("@sarah  ·  reviewer  ·  2m\n", style="bold")
-        comment.append("The callback flow looks clean. One small question about token expiry, ")
-        comment.append("otherwise this is ready to merge.", style="dim")
+        if self.app.github_snapshot is not None:
+            comment.append("No review activity loaded for this pull request.\n", style="dim")
+            comment.append("Read-only loading does not invent conversation data.", style="dim")
+        else:
+            comment.append("@sarah  ·  reviewer  ·  2m\n", style="bold")
+            comment.append("The callback flow looks clean. One small question about token expiry, ")
+            comment.append("otherwise this is ready to merge.", style="dim")
 
         right = Group(
             meta,
@@ -583,21 +586,25 @@ class MainScreen(Screen):
 
         number, title, labels, comments, age = rows[selected]
         header = Text()
-        header.append(f"musa/my-app  ·  Issue {number}\n", style=self._c("primary"))
+        header.append(f"{self.app.repository or 'repository'}  ·  Issue {number}\n", style=self._c("primary"))
         header.append(f"{title}\n", style="bold")
         header.append("\n OPEN ", style=f"bold {self._c('background')} on {self._c('success')}")
         header.append(f"  opened by @dlvhdr {age} ago  ·  {labels}\n", style="dim")
         header.append("\n▣ Conversation   ◉ Timeline   ◇ Related PRs", style="bold")
 
         first = Text()
-        first.append("@dlvhdr  ·  author  ·  2h\n", style="bold")
-        first.append(f"Discussion for “{title}”. ")
-        first.append("This thread captures the current context and reproduction details.\n\n", style="dim")
-        first.append("macOS 15.6  ·  Safari 18.6  ·  production", style=self._c("warning"))
         reply = Text()
-        reply.append("@musa  ·  maintainer  ·  38m\n", style="bold")
-        reply.append("Confirmed. The SameSite policy looks like the likely cause. ")
-        reply.append("I’m tracing the callback cookie now.", style="dim")
+        if self.app.github_snapshot is not None:
+            first.append("No issue conversation was returned by the read-only query.\n", style="dim")
+            reply.append("Comments are not fabricated; refresh to query the repository again.", style="dim")
+        else:
+            first.append("@dlvhdr  ·  author  ·  2h\n", style="bold")
+            first.append(f"Discussion for “{title}”. ")
+            first.append("This thread captures the current context and reproduction details.\n\n", style="dim")
+            first.append("macOS 15.6  ·  Safari 18.6  ·  production", style=self._c("warning"))
+            reply.append("@musa  ·  maintainer  ·  38m\n", style="bold")
+            reply.append("Confirmed. The SameSite policy looks like the likely cause. ")
+            reply.append("I’m tracing the callback cookie now.", style="dim")
         right = Group(
             header,
             Text("\n"),
@@ -700,9 +707,12 @@ class MainScreen(Screen):
             ("musa/job-agent", "Python", "private", "0", "1w"),
         ]
         if self.app.github_snapshot is not None:
-            rows = self.app.github_snapshot.repo_rows()
-            if not rows:
-                rows = [(self.app.repository or "—", "—", "—", "0", "now")]
+            repo = self.app.github_snapshot.repository
+            rows = [(
+                repo.get("nameWithOwner") or self.app.repository or "—",
+                "—", repo.get("visibility", "—"),
+                str(repo.get("stargazerCount", 0)), "now",
+            )]
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(ratio=1)
@@ -729,14 +739,17 @@ class MainScreen(Screen):
         info.append("GitHub workflow dashboard and deployment toolkit.\n\n", style="dim")
         info.append("main  ↑2   clean\n", style=self._c("success"))
         info.append(f"{lang}  ·  MIT  ·  {visibility}  ·  ★ {stars}\n\n", style="dim")
-        info.append("4 pull requests   7 issues   3 releases\n")
-        info.append("CI passing   production healthy", style=self._c("success"))
-        if self.app.github_snapshot:
+        snapshot = self.app.github_snapshot
+        if snapshot is not None:
+            info.append(f"{len(snapshot.pull_requests)} pull requests   {len(snapshot.issues)} issues   {len(snapshot.releases)} releases\n")
+            info.append(f"{len(snapshot.workflows)} workflow runs   {len(snapshot.commits)} commits", style=self._c("success"))
             branches = ", ".join(
-                branch.get("name", "") for branch in self.app.github_snapshot.branches[:5]
+                branch.get("name", "") for branch in snapshot.branches[:5]
             )
             if branches:
                 info.append(f"\n\nbranches  {branches}", style="dim")
+        else:
+            info.append("Repository data is still loading…", style="dim")
         tree = Text("▾ src\n  ▾ screens\n    overview.py\n    main.py\n  ▾ widgets\n    spinner.py\n  app.py\n▸ tests\nREADME.md", style="dim")
         actions = Text()
         actions.append("read-only loading phase\n", style=self._c("warning"))
@@ -774,11 +787,18 @@ class MainScreen(Screen):
             sha = (selected_item.get("sha") or "unknown")[:7]
             message = (selected_commit.get("message") or "commit").splitlines()[0]
             author = (selected_commit.get("author") or {}).get("name") or "unknown"
+            files = selected_item.get("files") or []
+            file_text = Text("Files changed\n", style=f"bold {self._c('primary')}")
+            if files:
+                for file in files:
+                    file_text.append(f"{file.get('status', 'M'):>8}  {file.get('filename', 'unknown')}\n", style="dim")
+            else:
+                file_text.append("No file details returned by GitHub.\n", style="dim")
             right = Group(
                 Text(f"Commit {sha}\n", style=self._c("primary")),
                 Text(f"{message}\n", style="bold"),
                 Text(f"@{author}  ·  {relative_time(selected_commit.get('committer', {}).get('date'))}  ·  {self.app.repository}\n", style="dim"),
-                Panel(Text("Commit details loaded read-only from GitHub.\nNo changes are written while browsing."), border_style=self._c("border")),
+                Panel(file_text, border_style=self._c("border")),
             )
             return Group(tree, Text(f"\n  {len(snapshot_commits)} commits loaded", style="dim")), right, self._status(
                 f"Commit {selected + 1}/{len(snapshot_commits)}", "read-only", "loaded", self.app.repository or ""
