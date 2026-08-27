@@ -543,5 +543,5 @@ class OverviewScreen(Screen):
         if self._refresh_frame >= 10:
             self._refresh_timer.stop()
             self._refresh_timer = None
-            self.app.begin_data_load()
+            self.app.begin_data_load(force=True)
             self.notify("Refreshing GitHub data…", timeout=1.5)

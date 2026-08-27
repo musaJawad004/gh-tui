@@ -130,17 +130,17 @@ class GhTuiApp(App):
                 self.push_screen(SplashScreen(destination=self.settings["default_screen"]))
         self.begin_data_load()
 
-    def begin_data_load(self) -> None:
+    def begin_data_load(self, *, force: bool = False) -> None:
         """Start read-only GitHub loading in a worker; results stay in memory."""
         if self.data_loading or not self.repository:
             return
         self.data_loading = True
         self.data_error = None
-        self.run_worker(self._load_data, thread=True, exclusive=True)
+        self.run_worker(lambda: self._load_data(force=force), thread=True, exclusive=True)
 
-    def _load_data(self) -> None:
+    def _load_data(self, *, force: bool = False) -> None:
         try:
-            snapshot = load_snapshot(self.repository, cwd=Path.cwd(), limit=self.settings.get("per_page", 30))
+            snapshot = load_snapshot(self.repository, cwd=Path.cwd(), limit=self.settings.get("per_page", 30), force=force)
         except GhCliError as exc:
             self.call_from_thread(self._data_failed, str(exc))
             return
