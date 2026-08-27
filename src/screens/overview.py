@@ -165,15 +165,15 @@ class OverviewScreen(Screen):
             yield Static(self._activity(), id="activity-list")
         with Horizontal(id="panels"):
             yield DashboardPanel(
-                "pull requests (4 open)", self._pull_requests(), "(p) view all",
+                f"pull requests ({len(self.app.github_snapshot.pull_requests) if self.app.github_snapshot is not None else 0} open)", self._pull_requests(), "(p) view all",
                 id="prs-panel", classes="dashboard-panel",
             )
             yield DashboardPanel(
-                "ci / workflows", self._workflows(), "(c) view all",
+                f"ci / workflows ({len(self.app.github_snapshot.workflows) if self.app.github_snapshot is not None else 0})", self._workflows(), "(c) view all",
                 id="ci-panel", classes="dashboard-panel",
             )
             yield DashboardPanel(
-                "deployments", self._deployments(), "(d) view all",
+                f"deployments ({len(self.app.github_snapshot.deployments) if self.app.github_snapshot is not None else 0})", self._deployments(), "(d) view all",
                 id="deploy-panel", classes="dashboard-panel",
             )
         with Horizontal(id="analytics"):
@@ -254,7 +254,12 @@ class OverviewScreen(Screen):
 
         now = datetime.now().astimezone()
         right = Text(justify="right")
-        right.append("clean", style=f"bold {self._c('success')}")
+        if self.app.data_loading:
+            right.append("loading…", style=f"bold {self._c('primary')}")
+        elif self.app.data_error:
+            right.append("offline", style=f"bold {self._c('warning')}")
+        else:
+            right.append("clean", style=f"bold {self._c('success')}")
         right.append("   │   ", style="dim")
         right.append(now.strftime("%a %d %b %Y  %I:%M %p"), style="dim")
         table.add_row(left, right)
@@ -278,7 +283,7 @@ class OverviewScreen(Screen):
             ("CI", str(len(snapshot.workflows)), "error"),
             ("Deploy", str(len(snapshot.deployments)), "success"),
             ("Releases", str(len(snapshot.releases)), "primary"),
-        ) if snapshot else (
+        ) if snapshot is not None else (
             ("PR", "4 open", "primary"), ("Issues", "7", "warning"),
             ("CI", "✕ 1", "error"), ("Deploy", "2", "success"),
             ("Releases", "3", "primary"),
@@ -310,8 +315,10 @@ class OverviewScreen(Screen):
             ("✓", "success", "5h", "bump dependencies", "main", ""),
             ("✓", "success", "6h", "feat: add usage analytics", "#138", "feat/analytics"),
         ]
-        if self.app.github_snapshot:
-            rows = self.app.github_snapshot.activity_rows() or rows
+        if self.app.github_snapshot is not None:
+            rows = self.app.github_snapshot.activity_rows()
+            if not rows:
+                rows = [("·", "muted", "now", "No recent activity", "—", "")]
         table = _grid(1, 2, 13, 2, 3, padding=(0, 1))
         for icon, color, age, event, ref, kind in rows:
             table.add_row(
@@ -328,11 +335,13 @@ class OverviewScreen(Screen):
             ("#140", "Fix mobile layout issues", "fix/mobile", "6/6 ✓", "18m ago"),
             ("#139", "Payment retry mechanism", "fix/payment", "6/6 ✓", "3h ago"),
         ]
-        if self.app.github_snapshot:
+        if self.app.github_snapshot is not None:
             rows = [
                 (number, title, branch, f"{checks} ✓", f"{age} ago")
                 for number, title, branch, _ci, checks, _changes, age in self.app.github_snapshot.pr_rows()
-            ] or rows
+            ]
+            if not rows:
+                rows = [("—", "No open pull requests", "—", "0/0", "now")]
         table = _grid(6, 2, 3, padding=(0, 0))
         for number, title, branch, checks, age in rows:
             left = Text(no_wrap=True, overflow="ellipsis")
@@ -358,11 +367,13 @@ class OverviewScreen(Screen):
             ("○", "warning", "deploy preview", "running"),
             ("✓", "success", "security scan", "1m 34s"),
         ]
-        if self.app.github_snapshot:
+        if self.app.github_snapshot is not None:
             rows = [
                 (icon, "error" if state == "failed" else "warning" if state == "running" else "success", name, duration)
                 for icon, name, _branch, state, duration, age in self.app.github_snapshot.workflow_rows()
-            ] or rows
+            ]
+            if not rows:
+                rows = [("·", "muted", "No workflow runs", "—")]
         table = _grid(1, 7, 3, padding=(0, 0))
         for icon, color, name, value in rows:
             table.add_row(
@@ -378,8 +389,10 @@ class OverviewScreen(Screen):
             ("○", "warning", "preview", "#142", "running", "•••"),
             ("○", "warning", "preview", "#141", "12m ago", "–"),
         ]
-        if self.app.github_snapshot:
-            rows = self.app.github_snapshot.deployment_rows() or rows
+        if self.app.github_snapshot is not None:
+            rows = self.app.github_snapshot.deployment_rows()
+            if not rows:
+                rows = [("·", "muted", "No deployments", "—", "now", "—")]
         table = _grid(1, 4, 3, 3, 2, padding=(0, 0))
         for icon, color, env, branch, age, result in rows:
             table.add_row(
@@ -425,39 +438,34 @@ class OverviewScreen(Screen):
 
         plot_width = max(24, success.size.width - 8)
         plot_height = max(5, success.size.height - 4)
-        success.update(
-            line_plot(
-                (91, 86, 94, 88, 96, 91, 95),
-                "95%  ·  22 / 23 passing",
-                self._c("success"),
-                width=plot_width,
-                height=plot_height,
-                legend="workflow success",
-            )
-        )
+        snapshot = self.app.github_snapshot
+        if self.app.data_loading:
+            success.update(Text("Loading workflow data…", style=self._c("primary")))
+            state.update(Text("Loading repository data…", style=self._c("primary")))
+            commits.update(Text("Loading commit activity…", style=self._c("primary")))
+            return
+        workflows = snapshot.workflows if snapshot is not None else []
+        if workflows:
+            outcomes = [
+                100 if (item.get("conclusion") or "").lower() == "success" else 0
+                for item in workflows[-12:]
+            ]
+            passed = sum(value == 100 for value in outcomes)
+            success.update(line_plot(tuple(outcomes), f"{round(passed / len(outcomes) * 100)}%  ·  {passed} / {len(outcomes)} passing", self._c("success"), width=plot_width, height=plot_height, legend="workflow success"))
+        else:
+            success.update(Text("No workflow data\n\nRun refresh after connecting gh.", style="dim"))
 
         donut_height = max(7, state.size.height - 2)
         if donut_height % 2 == 0:
             donut_height -= 1
         donut_width = min(state.size.width - 2, donut_height * 2 + 1)
-        state.update(
-            donut_chart(
-                (11, 42, 7),
-                "60 tracked items",
-                (self._c("primary"), self._c("success"), self._c("warning")),
-                width=donut_width,
-                height=donut_height,
-                labels=("open", "completed", "blocked"),
-            )
-        )
-        commits.update(
-            contribution_calendar(
-                "57 commits  ·  main ↑2",
-                self._c("warning"),
-                width=max(28, commits.size.width - 2),
-                height=max(9, commits.size.height),
-            )
-        )
+        if snapshot is not None:
+            open_count = len(snapshot.pull_requests) + len(snapshot.issues)
+            state.update(donut_chart((open_count, len(snapshot.commits), len(snapshot.workflows)), f"{open_count + len(snapshot.commits) + len(snapshot.workflows)} fetched items", (self._c("primary"), self._c("success"), self._c("warning")), width=donut_width, height=donut_height, labels=("open", "commits", "runs")))
+            if snapshot.commits:
+                commits.update(contribution_calendar(f"{len(snapshot.commits)} commits  ·  {self.app.repository}", self._c("warning"), width=max(28, commits.size.width - 2), height=max(9, commits.size.height)))
+            else:
+                commits.update(Text("No commits data\n\nNo commits were returned for this repository.", style="dim"))
 
     def _command_line(self) -> Table:
         table = _grid(1, 1, padding=(0, 0))

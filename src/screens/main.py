@@ -252,7 +252,8 @@ class MainScreen(Screen):
 
     def refresh_data(self) -> None:
         """Refresh visible renderables after the read-only gh worker completes."""
-        self._render_workspace()
+        if hasattr(self, "_section") and self.is_mounted:
+            self._render_workspace()
 
     def _c(self, name: str) -> str:
         return active_colors(self.app)[name]
@@ -470,8 +471,10 @@ class MainScreen(Screen):
             ("#140", "Fix mobile layout issues", "fix/mobile", "✓", "6/6", "+48  -12", "18m"),
             ("#139", "Payment retry mechanism", "fix/payment", "✓", "6/6", "+92  -31", "3h"),
         ]
-        if self.app.github_snapshot:
-            rows = self.app.github_snapshot.pr_rows() or rows
+        if self.app.github_snapshot is not None:
+            rows = self.app.github_snapshot.pr_rows()
+            if not rows:
+                rows = [("—", "No open pull requests", "—", "·", "0/0", "+0  -0", "now")]
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=6)
@@ -541,8 +544,10 @@ class MainScreen(Screen):
             ("#80", "Document the config file", "docs · good first issue", "3", "1d"),
             ("#78", "Flaky E2E on checkout step", "bug · ci", "6", "1d"),
         ]
-        if self.app.github_snapshot:
-            rows = self.app.github_snapshot.issue_rows() or rows
+        if self.app.github_snapshot is not None:
+            rows = self.app.github_snapshot.issue_rows()
+            if not rows:
+                rows = [("—", "No open issues", "—", "0", "now")]
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=6)
@@ -599,8 +604,10 @@ class MainScreen(Screen):
             ("○", "deploy preview", "feat/oauth", "running", "3m 11s", "now"),
             ("✓", "security scan", "main", "passed", "1m 34s", "18m"),
         ]
-        if self.app.github_snapshot:
-            rows = self.app.github_snapshot.workflow_rows() or rows
+        if self.app.github_snapshot is not None:
+            rows = self.app.github_snapshot.workflow_rows()
+            if not rows:
+                rows = [("·", "No workflow runs", "—", "queued", "—", "now")]
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=3)
@@ -676,8 +683,10 @@ class MainScreen(Screen):
             ("musa/emberflow", "Go", "public", "64", "5d"),
             ("musa/job-agent", "Python", "private", "0", "1w"),
         ]
-        if self.app.github_snapshot:
-            rows = self.app.github_snapshot.repo_rows() or rows
+        if self.app.github_snapshot is not None:
+            rows = self.app.github_snapshot.repo_rows()
+            if not rows:
+                rows = [(self.app.repository or "—", "—", "—", "0", "now")]
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(ratio=1)
