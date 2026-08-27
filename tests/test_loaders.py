@@ -26,10 +26,10 @@ def test_section_switch_uses_task_loader():
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.press("2")
             await pilot.pause(0.12)
-            assert app.screen.query_one("#loader").display
-            assert not app.screen.query_one("#workspace").display
+            assert app.screen._load_timer is not None
+            assert app.screen.query_one("#workspace").display
             await pilot.pause(0.7)
-            assert not app.screen.query_one("#loader").display
+            assert app.screen._load_timer is None
             assert app.screen.query_one("#workspace").display
 
     asyncio.run(run())

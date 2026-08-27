@@ -17,7 +17,7 @@ from textual.screen import Screen
 from textual.widgets import Static
 
 from themes.palettes import active_colors
-from widgets.spinner import indeterminate_bar, inline_loader
+from widgets.spinner import indeterminate_bar, inline_loader, spinner_frame
 
 SECTIONS = ["Pull Requests", "Issues", "CI / CD", "Repos", "Commits"]
 
@@ -74,16 +74,30 @@ class MainScreen(Screen):
         color: $text-muted;
         background: $surface;
     }
-    MainScreen.narrow #navigator { display: none; }
-    MainScreen.narrow #detail { width: 100%; padding: 1; }
-    MainScreen.narrow.list-pane #navigator { display: block; width: 100%; border-right: none; }
-    MainScreen.narrow.list-pane #detail { display: none; }
-    MainScreen.narrow.detail-pane #navigator { display: none; }
-    MainScreen.narrow.detail-pane #detail { display: block; width: 100%; }
+    MainScreen #too-small {
+        display: none;
+        height: 1fr;
+        content-align: center middle;
+        color: $text-muted;
+    }
+    MainScreen.huge #navigator { width: 36%; }
+    MainScreen.huge #detail { width: 64%; }
+    MainScreen.large #navigator { width: 40%; }
+    MainScreen.large #detail { width: 60%; }
+    MainScreen.single-pane.list-pane #navigator {
+        display: block; width: 100%; border-right: none;
+    }
+    MainScreen.single-pane.list-pane #detail { display: none; }
+    MainScreen.single-pane.detail-pane #navigator { display: none; }
+    MainScreen.single-pane.detail-pane #detail { display: block; width: 100%; }
     MainScreen.compact #header { height: 3; }
     MainScreen.compact #status { height: 1; }
     MainScreen.compact #navigator,
     MainScreen.compact #detail { padding: 0 1; }
+    MainScreen.too-small #header,
+    MainScreen.too-small #workspace,
+    MainScreen.too-small #status { display: none; }
+    MainScreen.too-small #too-small { display: block; }
     """
 
     BINDINGS = [
@@ -119,6 +133,7 @@ class MainScreen(Screen):
             with Vertical(id="detail"):
                 yield Static(id="detail-content")
         yield Static(id="status")
+        yield Static(id="too-small")
 
     def on_mount(self) -> None:
         self._section = self._initial_section
@@ -128,9 +143,11 @@ class MainScreen(Screen):
         self._selected = [0] * len(SECTIONS)
         self._item_counts = [4, 5, 6, 5, 8]
         self._pane = "list"
+        self._animation_frame = 0
         self.add_class("list-pane")
         self._apply_breakpoints(self.size.width, self.size.height)
         self._render_workspace()
+        self.set_interval(0.12, self._tick_ambient_animation)
 
     def on_resize(self, event: Resize) -> None:
         self._apply_breakpoints(event.size.width, event.size.height)
@@ -139,14 +156,27 @@ class MainScreen(Screen):
 
     def _apply_breakpoints(self, width: int, height: int) -> None:
         self._compact = height < 34
-        if width < 90:
-            self.add_class("narrow")
-        else:
-            self.remove_class("narrow")
-        if self._compact:
-            self.add_class("compact")
-        else:
-            self.remove_class("compact")
+        states = {
+            "huge": width >= 180 and height >= 50,
+            "large": 140 <= width < 180 and height >= 40,
+            "single-pane": width < 110 or height < 30,
+            "narrow": width < 90 or height < 26,
+            "compact": self._compact,
+            "too-small": width < 60 or height < 18,
+        }
+        for class_name, active in states.items():
+            if active:
+                self.add_class(class_name)
+            else:
+                self.remove_class(class_name)
+        message = Text("Terminal too small\n", style=f"bold {self._c('warning')}")
+        message.append("resize to at least 60 columns × 18 rows", style="dim")
+        self.query_one("#too-small", Static).update(message)
+
+    def _tick_ambient_animation(self) -> None:
+        self._animation_frame += 1
+        if self._section == 2 and self._load_timer is None and self.is_mounted:
+            self._render_workspace()
 
     def on_screen_resume(self) -> None:
         self.refresh_theme()
@@ -180,7 +210,8 @@ class MainScreen(Screen):
         line.append("  musa/my-app", style=self._c("primary"))
         line.append("  main ↑2", style=self._c("success"))
         line.append("  ·  clean\n", style="dim")
-        for index, name in enumerate(SECTIONS):
+        labels = ["PRs", "Issues", "CI", "Repos", "Commits"] if self.size.width < 90 else SECTIONS
+        for index, name in enumerate(labels):
             if index:
                 line.append("  │  ", style="dim")
             if index == self._section:
@@ -333,6 +364,8 @@ class MainScreen(Screen):
         table.add_column(width=11, justify="right")
         for index, (icon, name, branch, state, duration, age) in enumerate(rows):
             color = "error" if state == "failed" else "warning" if state == "running" else "success"
+            if state == "running":
+                icon = spinner_frame("dots", self._animation_frame)
             body = Text(name, style="bold" if index == 0 else "")
             body.append(f"\n{branch}", style="dim")
             tail = Text(state, style=self._c(color), justify="right")
@@ -465,7 +498,7 @@ class MainScreen(Screen):
         head.append("-83\n", style=self._c("error"))
         head.append("\n◀ previous commit   1 / 8 files   next file ▶", style="dim")
 
-        prefix, filename, change, _color, _initially_selected = file_rows[selected_row]
+        _prefix, filename, change, _color, _initially_selected = file_rows[selected_row]
         path = filename
         if selected_row in {2, 3}:
             path = f"src/screens/{filename}"
@@ -481,7 +514,6 @@ class MainScreen(Screen):
         diff_header = Text(f"▣ {path}     ", style="bold")
         diff_header.append(additions, style=self._c("success"))
         diff_header.append(f"  {deletions}", style=self._c("error"))
-        diff = _grid(1, 1, padding=(0, 1))
         old = Text()
         new = Text()
         for number, code, style in (
@@ -504,8 +536,22 @@ class MainScreen(Screen):
             (32, "        detail.update(right)", "success"),
         ):
             new.append(f"{number:>3}  {code}\n", style=self._c(style) if style else "dim")
-        diff.add_row(old, new)
-        right = Group(head, Text("\n"), Panel(diff, title=diff_header, border_style=self._c("border")))
+        if self.size.width < 120:
+            diff = Text()
+            diff.append(f"@@ selected change in {filename} @@\n", style=self._c("primary"))
+            diff.append("-     old implementation\n", style=self._c("error"))
+            diff.append(f"+     selected file: {filename}\n", style=self._c("success"))
+            diff.append("+     render responsive detail pane\n", style=self._c("success"))
+            diff.append("      preserve keyboard selection\n", style="dim")
+        else:
+            side_by_side = _grid(1, 1, padding=(0, 1))
+            side_by_side.add_row(old, new)
+            diff = side_by_side
+        right = Group(
+            head,
+            Text("\n"),
+            Panel(diff, title=diff_header, border_style=self._c("border")),
+        )
         status = self._status(
             "Commit 981dad2",
             "ahead 2 · behind 0",
@@ -516,18 +562,23 @@ class MainScreen(Screen):
 
     def _status(self, *items: str) -> Text:
         result = Text()
-        for index, item in enumerate(items):
+        visible_items = items[:2] if self.size.width < 110 else items
+        for index, item in enumerate(visible_items):
             if index:
                 result.append("  ·  ", style="dim")
             result.append(item, style=self._c("primary") if index == 0 else "dim")
-        result.append(
-            "     [j/k] select  [enter] detail  [tab] section  [←/→] pane  [o] overview  [q] quit",
-            style="dim",
+        controls = (
+            "   [j/k] select  [enter] detail  [tab] section  [q] quit"
+            if self.size.width < 110
+            else "     [j/k] select  [enter] detail  [tab] section  [←/→] pane  [o] overview  [q] quit"
         )
+        result.append(controls, style="dim")
         return result
 
     def _set_section(self, section: int) -> None:
         self._section = section % len(SECTIONS)
+        if self.has_class("single-pane"):
+            self._show_pane("list")
         self._render_header()
         self._begin_section_load()
 
@@ -535,8 +586,6 @@ class MainScreen(Screen):
         if self._load_timer is not None:
             self._load_timer.stop()
         self._load_frame = 0
-        self.query_one("#workspace", Horizontal).display = False
-        self.query_one("#loader", Static).display = True
         self._render_section_loader()
         self._load_timer = self.set_interval(0.08, self._tick_section_load)
 
@@ -547,8 +596,6 @@ class MainScreen(Screen):
             self._load_timer.stop()
             self._load_timer = None
             self._render_workspace()
-            self.query_one("#loader", Static).display = False
-            self.query_one("#workspace", Horizontal).display = True
 
     def _render_section_loader(self) -> None:
         tasks = [
@@ -566,9 +613,12 @@ class MainScreen(Screen):
             color=self._c("primary"),
             command=command,
         )
-        content.append("\n\n")
-        content.append_text(indeterminate_bar(self._load_frame, width=46, color=self._c("primary")))
-        self.query_one("#loader", Static).update(content)
+        content.append("  ")
+        bar_width = min(28, max(8, self.size.width - content.cell_len - 4))
+        content.append_text(
+            indeterminate_bar(self._load_frame, width=bar_width, color=self._c("primary"))
+        )
+        self.query_one("#status", Static).update(content)
 
     def action_next_section(self) -> None:
         self._set_section(self._section + 1)
@@ -595,17 +645,17 @@ class MainScreen(Screen):
         self._show_pane("detail")
 
     def action_back_to_list(self) -> None:
-        if self.has_class("narrow") and self._pane == "detail":
+        if self.has_class("single-pane") and self._pane == "detail":
             self._show_pane("list")
 
     def action_focus_right(self) -> None:
-        if self.has_class("narrow") and self._pane == "list":
+        if self.has_class("single-pane") and self._pane == "list":
             self._show_pane("detail")
         else:
             self.action_next_section()
 
     def action_focus_left(self) -> None:
-        if self.has_class("narrow") and self._pane == "detail":
+        if self.has_class("single-pane") and self._pane == "detail":
             self._show_pane("list")
         else:
             self.action_prev_section()
