@@ -360,6 +360,15 @@ class MainScreen(Screen):
         content.append(f"   {hint}", style="dim")
         return Panel(content, border_style=self._c("border"), padding=(0, 1))
 
+    def _configured_filter(self, kind: str) -> tuple[str, str]:
+        sections = self.app.settings.get(f"{kind}_sections", [])
+        if isinstance(sections, list) and sections:
+            index = min(self._selected[self._section], len(sections) - 1)
+            section = sections[index]
+            if isinstance(section, dict):
+                return str(section.get("filters", "is:open")), str(section.get("title", kind))
+        return ("is:open", kind)
+
     def _analytics(self, first: tuple, second: tuple) -> Panel:
         plot_width = 28
         donut_width = 21
@@ -514,8 +523,9 @@ class MainScreen(Screen):
             style = f"on {self._c('row_selected')}" if index == selected else None
             table.add_row(Text(number, style=self._c("primary")), title_cell, ci_cell, change_cell, style=style)
 
+        pr_filter, _ = self._configured_filter("pr")
         left = Group(
-            self._search("is:pr is:open author:@me", "4 open"),
+            self._search(pr_filter, f"{len(self.app.github_snapshot.pull_requests) if self.app.github_snapshot else 0} open"),
             Text("\n"),
             table,
         )
@@ -593,8 +603,9 @@ class MainScreen(Screen):
             tail = Text(f"◌ {comments}\n{age}", style="dim", justify="right")
             style = f"on {self._c('row_selected')}" if index == selected else None
             table.add_row(Text(number, style=self._c("warning")), body, tail, style=style)
+        issue_filter, _ = self._configured_filter("issue")
         left = Group(
-            self._search("is:issue is:open", "7 open"),
+            self._search(issue_filter, f"{len(self.app.github_snapshot.issues) if self.app.github_snapshot else 0} open"),
             Text("\n"),
             table,
         )
