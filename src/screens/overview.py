@@ -543,5 +543,5 @@ class OverviewScreen(Screen):
         if self._refresh_frame >= 10:
             self._refresh_timer.stop()
             self._refresh_timer = None
-            self.query_one("#activity-list", Static).update(self._activity())
-            self.notify("Dashboard refreshed", timeout=1.5)
+            self.app.begin_data_load()
+            self.notify("Refreshing GitHub data…", timeout=1.5)

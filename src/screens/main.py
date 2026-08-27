@@ -272,7 +272,7 @@ class MainScreen(Screen):
         ]
         left, right, status = renderers[self._section]()
         snapshot = self.app.github_snapshot
-        if snapshot is not None:
+        if snapshot is not None and not self.app.data_error:
             counts = [len(snapshot.pull_requests), len(snapshot.issues), len(snapshot.workflows), 1, len(snapshot.commits)]
             self._item_counts[self._section] = max(1, counts[self._section])
         self.query_one("#navigator-content", Static).update(left)

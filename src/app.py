@@ -15,6 +15,7 @@ from config import load_settings, save_settings
 from core.drafts import load_drafts, save_drafts
 from core.github_data import (
     GhCliError,
+    GitHubSnapshot,
     detect_local_repository,
     load_snapshot,
     parse_repository_url,
@@ -155,6 +156,9 @@ class GhTuiApp(App):
         self.notify(f"Loaded {snapshot.name} · read-only data", timeout=2)
 
     def _data_failed(self, error: str) -> None:
+        # Keep the UI truthful after a rate-limit/offline failure: an empty snapshot
+        # makes every panel render an explicit empty state instead of demo fixtures.
+        self.github_snapshot = GitHubSnapshot(repository={"nameWithOwner": self.repository or ""})
         self.data_loading = False
         self.data_error = error
         refresh = getattr(self.screen, "refresh_data", None)
