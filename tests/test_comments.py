@@ -48,9 +48,12 @@ def test_terminal_charts_have_real_axes_and_multiple_rows():
     console = Console(width=80, record=True)
     console.print(line_plot((5, 14, 8, 21, 13), "21 peak", "cyan", width=30, height=6))
     line_output = console.export_text(clear=True)
-    console.print(
-        donut_chart((4, 18, 3), "4 open · 18 merged · 3 closed", ("cyan", "green", "yellow"))
+    donut = donut_chart(
+        (4, 18, 3),
+        "4 open · 18 merged · 3 closed",
+        ("cyan", "green", "yellow"),
     )
+    console.print(donut)
     donut_output = console.export_text(clear=True)
 
     assert "┤" in line_output
@@ -58,6 +61,9 @@ def test_terminal_charts_have_real_axes_and_multiple_rows():
     assert line_output.count("\n") >= 8
     assert "25" in donut_output
     assert donut_output.count("●") >= 15
+    # A 31×9 request is aspect-corrected to 19 columns so it looks circular in
+    # terminal cells rather than like a wide oval.
+    assert len(donut.plain.splitlines()[0]) == 19
 
     console.print(contribution_calendar("57 commits", "yellow", width=60, height=16))
     calendar_output = console.export_text(clear=True)

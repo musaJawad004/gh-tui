@@ -74,8 +74,10 @@ def donut_chart(
         running += max(0, value) / total
         cumulative.append(running)
 
-    width = max(13, width | 1)
     height = max(7, height | 1)
+    # Terminal cells are approximately twice as tall as they are wide. Keeping the
+    # character-grid width near 2× height produces a visually round ring on screen.
+    width = max(13, min(width | 1, height * 2 + 1))
     center_x, center_y = width // 2, height // 2
     center_label = str(total)
     result = Text()
@@ -168,19 +170,23 @@ def horizontal_bars(
     summary: str,
     *,
     width: int = 42,
+    row_spacing: int = 0,
 ) -> Text:
     """Render labeled proportional bars with exact values and a compact legend."""
     peak = max(values, default=1) or 1
     label_width = max((len(label) for label in labels), default=4)
     bar_width = max(8, width - label_width - 9)
     result = Text(no_wrap=True)
-    for index, (label, value) in enumerate(zip(labels, values, strict=False)):
+    rows = tuple(zip(labels, values, strict=False))
+    for index, (label, value) in enumerate(rows):
         filled = round(value / peak * bar_width)
         color = colors[index % len(colors)]
         result.append(f"{label:<{label_width}}  ", style="dim")
         result.append("█" * filled, style=f"bold {color}")
         result.append("░" * (bar_width - filled), style="dim")
         result.append(f"  {value:>3}\n", style=color)
+        if row_spacing and index < len(rows) - 1:
+            result.append("\n" * row_spacing)
     result.append(summary, style="bold")
     return result
 

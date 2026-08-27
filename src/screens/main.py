@@ -411,7 +411,7 @@ class MainScreen(Screen):
                 "36 tracked issues",
                 (self._c("warning"), self._c("success"), self._c("error")),
                 width=min(31, width - 4),
-                height=9,
+                height=11,
                 labels=("open", "closed", "blocked"),
             )
             centered = Table.grid(expand=True)
@@ -426,10 +426,11 @@ class MainScreen(Screen):
                     (self._c("success"), self._c("error"), self._c("warning")),
                     "23 workflow runs · 95% success",
                     width=width - 4,
+                    row_spacing=1,
                 ),
                 title="workflow outcomes",
                 border_style=self._c("border"),
-                padding=(1, 1),
+                padding=(0, 1),
             )
         if self._section == 3:
             return Panel(
