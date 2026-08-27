@@ -14,7 +14,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.events import Resize
 from textual.screen import Screen
-from textual.widgets import Static
+from textual.widgets import Static, TextArea
 
 from themes.palettes import active_colors
 from widgets.spinner import indeterminate_bar, inline_loader, spinner_frame
@@ -27,6 +27,16 @@ def _grid(*ratios: int, padding: tuple[int, int] = (0, 1)) -> Table:
     for ratio in ratios:
         table.add_column(ratio=ratio)
     return table
+
+
+class CommentEditor(TextArea):
+    """A text editor that opts into focus only when clicked or explicitly opened."""
+
+    can_focus = False
+
+    def on_click(self) -> None:
+        self.can_focus = True
+        self.focus()
 
 
 class MainScreen(Screen):
@@ -59,6 +69,21 @@ class MainScreen(Screen):
         padding: 1 2;
         overflow: hidden hidden;
         background: $background;
+    }
+    MainScreen #detail-content { height: 1fr; overflow: hidden hidden; }
+    MainScreen #comment-editor {
+        display: none;
+        height: 6;
+        margin: 0 0 1 0;
+        border: round $border-dim;
+        background: $background;
+        color: $foreground;
+    }
+    MainScreen #comment-editor:focus { border: round $primary; }
+    MainScreen #comment-hint {
+        display: none;
+        height: 1;
+        color: $text-muted;
     }
     MainScreen #loader {
         display: none;
@@ -94,6 +119,7 @@ class MainScreen(Screen):
     MainScreen.compact #status { height: 1; }
     MainScreen.compact #navigator,
     MainScreen.compact #detail { padding: 0 1; }
+    MainScreen.compact #comment-editor { height: 4; margin-bottom: 0; }
     MainScreen.too-small #header,
     MainScreen.too-small #workspace,
     MainScreen.too-small #status { display: none; }
@@ -115,6 +141,7 @@ class MainScreen(Screen):
         ("down", "selection_down", ""),
         ("up", "selection_up", ""),
         ("enter", "open_detail", "Open"),
+        ("e", "focus_comment", "Comment"),
         ("escape", "back_to_list", "Back"),
         ("o", "overview", "Overview"),
         ("g", "settings", "Settings"),
@@ -132,6 +159,13 @@ class MainScreen(Screen):
                 yield Static(id="navigator-content")
             with Vertical(id="detail"):
                 yield Static(id="detail-content")
+                yield CommentEditor(
+                    placeholder="Write a Markdown comment…",
+                    soft_wrap=True,
+                    show_line_numbers=False,
+                    id="comment-editor",
+                )
+                yield Static("Markdown · draft saved locally · no submission yet", id="comment-hint")
         yield Static(id="status")
         yield Static(id="too-small")
 
@@ -144,6 +178,7 @@ class MainScreen(Screen):
         self._item_counts = [4, 5, 6, 5, 8]
         self._pane = "list"
         self._animation_frame = 0
+        self._comment_drafts: dict[tuple[int, int], str] = {}
         self.add_class("list-pane")
         self._apply_breakpoints(self.size.width, self.size.height)
         self._render_workspace()
@@ -203,6 +238,35 @@ class MainScreen(Screen):
         self.query_one("#navigator-content", Static).update(left)
         self.query_one("#detail-content", Static).update(right)
         self.query_one("#status", Static).update(status)
+        self._configure_comment_editor()
+
+    def _draft_key(self) -> tuple[int, int]:
+        return self._section, self._selection()
+
+    def _save_comment_draft(self) -> None:
+        if self._section in {0, 1}:
+            editor = self.query_one("#comment-editor", TextArea)
+            self._comment_drafts[self._draft_key()] = editor.text
+
+    def _configure_comment_editor(self) -> None:
+        editor = self.query_one("#comment-editor", TextArea)
+        hint = self.query_one("#comment-hint", Static)
+        supports_comments = self._section in {0, 1}
+        editor.display = supports_comments
+        hint.display = supports_comments
+        if supports_comments:
+            editor.placeholder = (
+                "Write a PR review comment…"
+                if self._section == 0
+                else "Write an issue reply…"
+            )
+            draft = self._comment_drafts.get(self._draft_key(), "")
+            if editor.text != draft:
+                editor.load_text(draft)
+
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        if event.text_area.id == "comment-editor" and self._section in {0, 1}:
+            self._comment_drafts[self._draft_key()] = event.text_area.text
 
     def _render_header(self) -> None:
         line = Text()
@@ -225,6 +289,22 @@ class MainScreen(Screen):
         content.append(value)
         content.append(f"   {hint}", style="dim")
         return Panel(content, border_style=self._c("border"), padding=(0, 1))
+
+    def _analytics(self, first: tuple, second: tuple) -> Table:
+        table = _grid(1, 1, padding=(0, 1))
+        table.add_row(self._chart(*first), self._chart(*second))
+        return table
+
+    def _chart(self, title: str, values: tuple[int, ...], summary: str, color: str) -> Panel:
+        blocks = "▁▂▃▄▅▆▇█"
+        peak = max(values) or 1
+        chart = Text()
+        for value in values:
+            index = min(7, round((value / peak) * 7))
+            chart.append(blocks[index], style=self._c(color))
+            chart.append(" ")
+        chart.append(f"\n{summary}", style="dim")
+        return Panel(chart, title=title, border_style=self._c("border"), padding=(0, 1))
 
     def _pull_requests(self):
         rows = [
@@ -260,6 +340,11 @@ class MainScreen(Screen):
             self._search("is:pr is:open author:@me", "4 open"),
             Text("\n"),
             table,
+            Text("\n"),
+            self._analytics(
+                ("merge rate", (42, 56, 51, 68, 72, 81, 76), "76% · last 7 days", "success"),
+                ("pull request state", (4, 18, 3), "4 open · 18 merged · 3 closed", "primary"),
+            ),
         )
 
         number, title, branch, _ci, checks, changes, age = rows[selected]
@@ -289,7 +374,6 @@ class MainScreen(Screen):
             Panel(summary, title="review summary", border_style=self._c("border")),
             Text("\n conversation", style=self._c("primary")),
             Panel(comment, border_style=self._c("border")),
-            Panel(Text("comment  █", style="dim"), border_style=self._c("border")),
         )
         return left, right, self._status(
             f"PR {selected + 1}/{len(rows)}", "2 approvals", f"{checks} checks", "8 files"
@@ -314,7 +398,16 @@ class MainScreen(Screen):
             tail = Text(f"◌ {comments}\n{age}", style="dim", justify="right")
             style = f"on {self._c('row_selected')}" if index == selected else None
             table.add_row(Text(number, style=self._c("warning")), body, tail, style=style)
-        left = Group(self._search("is:issue is:open", "7 open"), Text("\n"), table)
+        left = Group(
+            self._search("is:issue is:open", "7 open"),
+            Text("\n"),
+            table,
+            Text("\n"),
+            self._analytics(
+                ("resolution rate", (31, 48, 44, 62, 58, 73, 79), "79% · last 7 days", "warning"),
+                ("issue state", (7, 24, 5), "7 open · 24 closed · 5 blocked", "primary"),
+            ),
+        )
 
         number, title, labels, comments, age = rows[selected]
         header = Text()
@@ -338,8 +431,6 @@ class MainScreen(Screen):
             Text("\n"),
             Panel(first, border_style=self._c("border")),
             Panel(reply, border_style=self._c("border")),
-            Text("\n reply", style=self._c("primary")),
-            Panel(Text("Write a comment…  █\n\nMarkdown supported", style="dim"), border_style=self._c("primary")),
         )
         return left, right, self._status(
             f"Issue {selected + 1}/{len(rows)}",
@@ -372,7 +463,16 @@ class MainScreen(Screen):
             tail.append(f"\n{duration} · {age}", style="dim")
             style = f"on {self._c('row_selected')}" if index == selected else None
             table.add_row(Text(icon, style=self._c(color)), body, tail, style=style)
-        left = Group(self._search("branch:main event:push", "23 runs"), Text("\n"), table)
+        left = Group(
+            self._search("branch:main event:push", "23 runs"),
+            Text("\n"),
+            table,
+            Text("\n"),
+            self._analytics(
+                ("success rate", (91, 86, 94, 88, 96, 91, 95), "95% · last 7 days", "success"),
+                ("run outcomes", (19, 3, 1), "19 passed · 3 failed · 1 running", "warning"),
+            ),
+        )
 
         _icon, name, branch, state, duration, age = rows[selected]
         state_color = "error" if state == "failed" else "warning" if state == "running" else "success"
@@ -443,7 +543,16 @@ class MainScreen(Screen):
                 tail,
                 style=f"on {self._c('row_selected')}" if index == selected else None,
             )
-        left = Group(self._search("owner:musa", "6 repos"), Text("\n"), table)
+        left = Group(
+            self._search("owner:musa", "6 repos"),
+            Text("\n"),
+            table,
+            Text("\n"),
+            self._analytics(
+                ("commit activity", (4, 7, 3, 9, 12, 8, 14), "57 commits · 7 days", "primary"),
+                ("repository health", (82, 87, 91, 89), "A- · 89/100", "success"),
+            ),
+        )
         name, lang, visibility, stars, age = rows[selected]
         info = Text()
         info.append(f"{name}\n", style=f"bold {self._c('primary')}")
@@ -487,7 +596,15 @@ class MainScreen(Screen):
                 row.stylize(f"bold on {self._c('row_selected')}")
             tree.append_text(row)
             tree.append("\n")
-        left = Group(tree, Text("\n  8 files   +386 additions   -83 deletions", style="dim"))
+        left = Group(
+            tree,
+            Text("\n  8 files   +386 additions   -83 deletions", style="dim"),
+            Text("\n"),
+            self._analytics(
+                ("commit graph", (3, 5, 4, 8, 6, 11, 9), "main ─●─●─●  ↑2", "primary"),
+                ("change volume", (84, 31, 198, 16, 41, 16, 12), "+386 · -83", "success"),
+            ),
+        )
 
         head = Text()
         head.append("Commit 981dad2\n", style=self._c("primary"))
@@ -568,9 +685,9 @@ class MainScreen(Screen):
                 result.append("  ·  ", style="dim")
             result.append(item, style=self._c("primary") if index == 0 else "dim")
         controls = (
-            "   [j/k] select  [enter] detail  [tab] section  [q] quit"
+            "   [j/k] select  [enter] detail  [e] comment  [tab] section  [q] quit"
             if self.size.width < 110
-            else "     [j/k] select  [enter] detail  [tab] section  [←/→] pane  [o] overview  [q] quit"
+            else "     [j/k] select  [enter] detail  [e] comment  [tab] section  [←/→] pane  [o] overview  [q] quit"
         )
         result.append(controls, style="dim")
         return result
@@ -644,7 +761,20 @@ class MainScreen(Screen):
     def action_open_detail(self) -> None:
         self._show_pane("detail")
 
+    def action_focus_comment(self) -> None:
+        if self._section not in {0, 1}:
+            return
+        self._show_pane("detail")
+        editor = self.query_one("#comment-editor", CommentEditor)
+        editor.can_focus = True
+        editor.focus()
+
     def action_back_to_list(self) -> None:
+        editor = self.query_one("#comment-editor", TextArea)
+        if editor.has_focus:
+            editor.blur()
+            editor.can_focus = False
+            return
         if self.has_class("single-pane") and self._pane == "detail":
             self._show_pane("list")
 
