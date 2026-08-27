@@ -12,6 +12,7 @@ from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.events import Resize
 from textual.screen import Screen
 from textual.widgets import Static
 
@@ -67,16 +68,16 @@ class OverviewScreen(Screen):
     }
 
     OverviewScreen #activity {
-        height: 1fr;
-        min-height: 11;
+        height: 11;
         padding: 1 1 0 1;
+        overflow: hidden hidden;
     }
     OverviewScreen #activity-title { height: 2; }
-    OverviewScreen #activity-list { height: 1fr; }
+    OverviewScreen #activity-list { height: auto; }
 
     OverviewScreen #panels {
-        height: 15;
-        min-height: 11;
+        height: 13;
+        overflow: hidden hidden;
     }
     OverviewScreen .dashboard-panel {
         height: 100%;
@@ -110,6 +111,25 @@ class OverviewScreen(Screen):
         color: $text-muted;
         content-align: left middle;
     }
+
+    OverviewScreen.compact #masthead,
+    OverviewScreen.compact #repo-summary { height: 2; }
+    OverviewScreen.compact #activity { height: 8; padding-top: 0; }
+    OverviewScreen.compact #activity-title { height: 1; }
+    OverviewScreen.compact #panels { height: 10; }
+    OverviewScreen.compact #quick-panel { display: none; }
+    OverviewScreen.compact #command-line { height: 2; margin-top: 0; }
+    OverviewScreen.compact #footer { height: 1; }
+
+    OverviewScreen.narrow #repo-summary { display: none; }
+    OverviewScreen.narrow #activity { height: 6; }
+    OverviewScreen.narrow #panels { height: 8; }
+    OverviewScreen.narrow #prs-panel { width: 100%; margin-right: 0; }
+    OverviewScreen.narrow #ci-panel,
+    OverviewScreen.narrow #deploy-panel { display: none; }
+
+    OverviewScreen.tiny #activity { height: 5; }
+    OverviewScreen.tiny #panels { display: none; }
     """
 
     BINDINGS = [
@@ -155,6 +175,22 @@ class OverviewScreen(Screen):
     def on_mount(self) -> None:
         self._refresh_frame = 0
         self._refresh_timer = None
+        self._apply_breakpoints(self.size.width, self.size.height)
+
+    def on_resize(self, event: Resize) -> None:
+        self._apply_breakpoints(event.size.width, event.size.height)
+
+    def _apply_breakpoints(self, width: int, height: int) -> None:
+        states = {
+            "compact": width < 110 or height < 34,
+            "narrow": width < 90 or height < 26,
+            "tiny": width < 60 or height < 20,
+        }
+        for class_name, active in states.items():
+            if active:
+                self.add_class(class_name)
+            else:
+                self.remove_class(class_name)
 
     def _c(self, name: str) -> str:
         return active_colors(self.app)[name]
