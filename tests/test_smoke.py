@@ -59,3 +59,30 @@ def test_workspace_uses_compact_single_pane_at_cli_sizes():
             assert app.screen.query_one("#detail").display
 
     asyncio.run(run())
+
+
+def test_overview_density_does_not_expand_activity_on_huge_terminals():
+    async def run() -> None:
+        app = GhTuiApp(start_screen="overview")
+        async with app.run_test(size=(240, 70)) as pilot:
+            await pilot.pause()
+            activity = app.screen.query_one("#activity")
+            panels = app.screen.query_one("#panels")
+            assert activity.size.height <= 11
+            assert panels.region.y <= 18
+
+    asyncio.run(run())
+
+
+def test_overview_collapses_to_one_card_on_narrow_terminals():
+    async def run() -> None:
+        app = GhTuiApp(start_screen="overview")
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            assert app.screen.has_class("compact")
+            assert app.screen.has_class("narrow")
+            assert app.screen.query_one("#prs-panel").display
+            assert not app.screen.query_one("#ci-panel").display
+            assert not app.screen.query_one("#deploy-panel").display
+
+    asyncio.run(run())
