@@ -6,9 +6,12 @@ start screen (the focused workspace by default).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from textual.app import App
 from textual.binding import Binding
 
+from config import load_settings, save_settings
 from themes import DEFAULT_THEME, THEME_NAMES, register_themes
 
 
@@ -24,27 +27,35 @@ class GhTuiApp(App):
         Binding("ctrl+t", "cycle_theme", "Theme"),
     ]
 
-    def __init__(self, theme: str | None = None, start_screen: str | None = None) -> None:
+    def __init__(
+        self,
+        theme: str | None = None,
+        start_screen: str | None = None,
+        config_path: Path | None = None,
+    ) -> None:
         super().__init__()
         # Register + apply the theme here so its custom CSS variables ($border-dim,
         # $row-selected, ...) are defined when the stylesheet is first parsed.
         register_themes(self)
-        self.theme = theme if theme in THEME_NAMES else DEFAULT_THEME
+        self._config_path = config_path
+        self.settings = load_settings(config_path)
+        saved_theme = self.settings.get("theme")
+        requested_theme = theme if theme in THEME_NAMES else saved_theme
+        self.theme = requested_theme if requested_theme in THEME_NAMES else DEFAULT_THEME
+        self.settings["theme"] = self.theme
         self._start_screen = start_screen
-        # App-wide settings (edited on the Settings screen).
-        self.settings: dict = {
-            "theme": self.theme,
-            "nerd_fonts": False,
-            "default_screen": "workspace",
-            "confirm_destructive": True,
-            "auto_refresh": "30s",
-            "per_page": 30,
-            "default_owner": "musaJawad004",
-            "base_branch": "main",
-        }
 
     def action_quit(self) -> None:
+        self.persist_settings()
         self.exit()
+
+    def persist_settings(self) -> bool:
+        """Save settings without allowing a filesystem problem to crash the TUI."""
+        try:
+            save_settings(self.settings, self._config_path)
+        except OSError:
+            return False
+        return True
 
     def action_help(self) -> None:
         from screens.help import HelpScreen
@@ -58,6 +69,7 @@ class GhTuiApp(App):
         i = names.index(current) if current in names else 0
         self.theme = names[(i + 1) % len(names)]
         self.settings["theme"] = self.theme
+        self.persist_settings()
         refresh_theme = getattr(self.screen, "refresh_theme", None)
         if refresh_theme:
             refresh_theme()
@@ -77,10 +89,10 @@ class GhTuiApp(App):
             self.push_screen(SettingsScreen())
         else:
             # Default: CLI-style boot splash -> focused terminal workspace.
-            self.push_screen(
-                OverviewScreen() if self._start_screen == "overview" else SplashScreen()
-            )
-
+            if self._start_screen == "overview":
+                self.push_screen(OverviewScreen())
+            else:
+                self.push_screen(SplashScreen(destination=self.settings["default_screen"]))
 
 def main() -> None:
     GhTuiApp().run()

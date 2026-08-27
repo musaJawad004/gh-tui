@@ -1,48 +1,42 @@
-"""OverviewScreen — the gh-flow dashboard (default landing view).
+"""Reference-style gh-flow dashboard.
 
-Clean, spacious layout: status line, stat cards with icons, MAIN MENU + RECENT ACTIVITY,
-then PULL REQUESTS / ACTIONS·CI / REPOSITORY HEALTH, a command-palette line and a footer.
-UI only (mock data). Menu items (and their shortcut letters) route to focused section views.
+This is the default landing view: a dense, terminal-native repository overview with
+activity, pull requests, CI and deployment status visible at once.
 """
 
 from __future__ import annotations
+
+from datetime import datetime
 
 from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widget import Widget
-from textual.widgets import OptionList, Static
-from textual.widgets.option_list import Option
+from textual.widgets import Static
 
 from themes.palettes import active_colors
-
-# section id -> MainScreen section index
-SECTION_ROUTE = {"pull_requests": 0, "issues": 1, "actions": 2, "repositories": 3, "commits": 4}
+from widgets.spinner import indeterminate_bar, inline_loader
 
 
-def _grid(*cols: int) -> Table:
-    t = Table.grid(expand=True, padding=(0, 1))
-    for _ in cols:
-        t.add_column()
-    return t
+def _grid(*ratios: int, padding: tuple[int, int] = (0, 1)) -> Table:
+    table = Table.grid(expand=True, padding=padding)
+    for ratio in ratios:
+        table.add_column(ratio=ratio)
+    return table
 
 
-class Panel(Vertical):
-    """Bordered box with a blue title (and optional 'view all' subtitle)."""
+class DashboardPanel(Vertical):
+    """A compact bordered dashboard panel with title text in its top rule."""
 
-    def __init__(self, title: str, renderable, subtitle: str | None = None, **kw) -> None:
+    def __init__(self, title: str, renderable, subtitle: str | None = None, **kwargs) -> None:
         self._title = title
         self._subtitle = subtitle
         self._renderable = renderable
-        super().__init__(**kw)
+        super().__init__(**kwargs)
 
     def compose(self) -> ComposeResult:
-        if isinstance(self._renderable, Widget):
-            yield self._renderable
-        else:
-            yield Static(self._renderable)
+        yield Static(self._renderable)
 
     def on_mount(self) -> None:
         self.border_title = self._title
@@ -52,355 +46,334 @@ class Panel(Vertical):
 
 class OverviewScreen(Screen):
     DEFAULT_CSS = """
-    OverviewScreen { layout: vertical; background: $background; }
-
-    #topbar { height: 1; padding: 0 2; }
-
-    #stats { height: 5; padding: 1 1 0 1; }
-    #stats .card { width: 1fr; height: 100%; border: round $border-dim; padding: 0 1; margin: 0 1; }
-
-    #mid { height: 1fr; padding: 1 1 0 1; }
-    #menu-panel { width: 36; margin: 0 1; }
-    #activity-panel { width: 1fr; margin: 0 1; }
-
-    #bottom { height: 12; padding: 1 1 0 1; }
-    #prs-panel { width: 1fr; margin: 0 1; }
-    #ci-panel { width: 1fr; margin: 0 1; }
-    #health-panel { width: 44; margin: 0 1; }
-
-    .panel {
-        border: round $border-dim; padding: 0 1;
-        border-title-color: $primary; border-title-align: left;
-        border-subtitle-color: $primary; border-subtitle-align: right;
+    OverviewScreen {
+        layout: vertical;
+        background: $background;
+        color: $foreground;
+        padding: 0 1;
     }
-    #menu { background: $background; height: 1fr; border: none; padding: 0; scrollbar-size: 0 0; }
-    #menu > .option-list--option-highlighted { background: $primary; color: $text-primary; text-style: bold; }
 
-    #palette-panel { height: 3; padding: 1 1 0 1; }
-    #palette-panel .panel { margin: 0 1; }
+    OverviewScreen #masthead {
+        height: 3;
+        padding: 0 1;
+        content-align: left middle;
+        border-bottom: solid $border-dim;
+    }
+    OverviewScreen #repo-summary {
+        height: 3;
+        padding: 0 1;
+        content-align: left middle;
+        border-bottom: solid $border-dim;
+    }
 
-    #footer { height: 1; padding: 0 2; color: $text-muted; }
+    OverviewScreen #activity {
+        height: 1fr;
+        min-height: 11;
+        padding: 1 1 0 1;
+    }
+    OverviewScreen #activity-title { height: 2; }
+    OverviewScreen #activity-list { height: 1fr; }
+
+    OverviewScreen #panels {
+        height: 15;
+        min-height: 11;
+    }
+    OverviewScreen .dashboard-panel {
+        height: 100%;
+        border: round $border-dim;
+        border-title-color: $primary;
+        border-title-align: left;
+        border-subtitle-color: $text-muted;
+        border-subtitle-align: right;
+        padding: 0 1;
+    }
+    OverviewScreen .dashboard-panel Static { height: 1fr; }
+    OverviewScreen #prs-panel { width: 43%; margin-right: 1; }
+    OverviewScreen #ci-panel { width: 27%; margin-right: 1; }
+    OverviewScreen #deploy-panel { width: 30%; }
+
+    OverviewScreen #quick-panel {
+        height: 4;
+        min-height: 3;
+        margin-top: 1;
+    }
+    OverviewScreen #command-line {
+        height: 3;
+        margin-top: 1;
+        border: round $border-dim;
+        padding: 0 1;
+        content-align: left middle;
+    }
+    OverviewScreen #footer {
+        height: 2;
+        padding: 0 1;
+        color: $text-muted;
+        content-align: left middle;
+    }
     """
 
     BINDINGS = [
-        ("enter", "open_selected", "Open"),
-        ("r", "goto_repositories", ""),
         ("p", "goto_pull_requests", ""),
         ("i", "goto_issues", ""),
-        ("a", "goto_actions", ""),
-        ("c", "goto_commits", ""),
+        ("c", "goto_actions", ""),
+        ("d", "goto_deployments", ""),
+        ("b", "goto_branches", ""),
+        ("l", "goto_releases", ""),
         ("s", "goto_settings", ""),
+        ("r", "refresh_dashboard", "Refresh"),
+        ("slash", "commands", "Commands"),
+        ("j", "noop", ""),
+        ("k", "noop", ""),
     ]
 
-    # ---- compose ----
-
     def compose(self) -> ComposeResult:
-        yield Static(self._topbar(), id="topbar")
-        with Horizontal(id="stats"):
-            yield from self._stat_cards()
-        with Horizontal(id="mid"):
-            yield Panel("MAIN MENU", self._menu(), id="menu-panel", classes="panel")
-            yield Panel(
-                "RECENT ACTIVITY",
-                self._activity(),
-                subtitle="view all",
-                id="activity-panel",
-                classes="panel",
+        yield Static(self._masthead(), id="masthead")
+        yield Static(self._repo_summary(), id="repo-summary")
+        with Vertical(id="activity"):
+            yield Static(self._activity_title(), id="activity-title")
+            yield Static(self._activity(), id="activity-list")
+        with Horizontal(id="panels"):
+            yield DashboardPanel(
+                "pull requests (4 open)", self._pull_requests(), "(p) view all",
+                id="prs-panel", classes="dashboard-panel",
             )
-        with Horizontal(id="bottom"):
-            yield Panel(
-                "PULL REQUESTS",
-                self._prs(),
-                subtitle="view all (7)",
-                id="prs-panel",
-                classes="panel",
+            yield DashboardPanel(
+                "ci / workflows", self._workflows(), "(c) view all",
+                id="ci-panel", classes="dashboard-panel",
             )
-            yield Panel(
-                "ACTIONS / CI STATUS",
-                self._ci(),
-                subtitle="view all (23)",
-                id="ci-panel",
-                classes="panel",
+            yield DashboardPanel(
+                "deployments", self._deployments(), "(d) view all",
+                id="deploy-panel", classes="dashboard-panel",
             )
-            yield Panel("REPOSITORY HEALTH", self._health(), id="health-panel", classes="panel")
-        with Horizontal(id="palette-panel"):
-            yield Panel("COMMAND PALETTE", self._palette(), classes="panel")
+        yield DashboardPanel(
+            "quick commands", self._quick_commands(),
+            id="quick-panel", classes="dashboard-panel",
+        )
+        yield Static(self._command_line(), id="command-line")
         yield Static(self._footer(), id="footer")
 
     def on_mount(self) -> None:
-        self.query_one("#menu", OptionList).highlighted = 0
+        self._refresh_frame = 0
+        self._refresh_timer = None
 
     def _c(self, name: str) -> str:
         return active_colors(self.app)[name]
 
     def refresh_theme(self) -> None:
-        """Recompose the optional overview so its inline colors follow the theme."""
         self.refresh(recompose=True)
 
-    # ---- top bar ----
-
-    def _topbar(self) -> Table:
-        g = _grid(1, 1)
+    def _masthead(self) -> Table:
+        table = _grid(3, 2)
         left = Text()
-        left.append("gh-flow", style=f"bold {self._c('primary')}")
-        left.append(" v0.1.0      ", style="dim")
-        for label, value in (
-            ("repo: ", "musa/my-app"),
-            ("branch: ", "main"),
-            ("status: ", "clean"),
+        left.append("gh-flow", style=f"bold {self._c('success')}")
+        left.append("  v0.1.0        ", style="dim")
+        left.append("⑂  ", style="bold")
+        left.append("musa/my-app", style=self._c("primary"))
+        left.append("      main", style=self._c("success"))
+        left.append("  ↑2", style="dim")
+
+        now = datetime.now().astimezone()
+        right = Text(justify="right")
+        right.append("clean", style=f"bold {self._c('success')}")
+        right.append("   │   ", style="dim")
+        right.append(now.strftime("%a %d %b %Y  %I:%M %p"), style="dim")
+        table.add_row(left, right)
+        return table
+
+    def _repo_summary(self) -> Table:
+        table = _grid(3, 3, 3, 9)
+        repo = Text("repo:  ", style="dim")
+        repo.append("musa/my-app", style=self._c("primary"))
+        branch = Text("branch:  ", style="dim")
+        branch.append("main", style=self._c("success"))
+        branch.append("  ↑2", style="dim")
+        status = Text("status:  ", style="dim")
+        status.append("clean", style=self._c("success"))
+
+        counts = Text(justify="right")
+        for label, value, color in (
+            ("PR", "4 open", "primary"), ("Issues", "7", "warning"),
+            ("CI", "✕ 1", "error"), ("Deploy", "2", "success"),
+            ("Releases", "3", "primary"),
         ):
-            left.append(label, style="dim")
-            left.append(value + "     ", style=self._c("success"))
-        right = Text("Sun 25 May 2025   11:42 PM", style="dim", justify="right")
-        g.add_row(left, right)
-        return g
+            if counts:
+                counts.append("  ·  ", style="dim")
+            counts.append(f"{label} ", style="dim")
+            counts.append(value, style=self._c(color))
+        table.add_row(repo, branch, status, counts)
+        return table
 
-    # ---- stat cards ----
-
-    def _stat_cards(self):
-        cards = [
-            (
-                "⇄",
-                self._c("primary"),
-                "PULL REQUESTS",
-                [("4", "open", self._c("success")), ("2", "review", "dim")],
-            ),
-            (
-                "◉",
-                self._c("warning"),
-                "ISSUES",
-                [("7", "open", self._c("warning")), ("3", "assigned", "dim")],
-            ),
-            (
-                "▷",
-                self._c("accent"),
-                "ACTIONS / CI",
-                [("1", "failed", self._c("error")), ("2", "running", self._c("warning"))],
-            ),
-            (
-                "⇧",
-                self._c("success"),
-                "DEPLOYMENTS",
-                [("2", "active", self._c("success")), ("1", "healthy", "dim")],
-            ),
-            ("◆", self._c("secondary"), "NOTIFICATIONS", [("3", "unread", self._c("secondary"))]),
-            (
-                "◈",
-                self._c("primary"),
-                "RELEASES",
-                [("3", "published", self._c("success")), ("1", "draft", "dim")],
-            ),
-        ]
-        for icon, color, title, rows in cards:
-            t = Text()
-            t.append(f"{icon}  ", style=color)
-            t.append(f"{title}\n", style="dim")
-            for i, (num, label, style) in enumerate(rows):
-                if i:
-                    t.append("\n")
-                t.append(f"{num} ", style=f"bold {style}")
-                t.append(label, style="dim")
-            yield Static(t, classes="card")
-
-    # ---- main menu ----
-
-    def _menu(self) -> OptionList:
-        items = [
-            ("overview", "⌂", "Overview", ""),
-            ("repositories", "▤", "Repositories", "r"),
-            ("pull_requests", "⇄", "Pull Requests", "p"),
-            ("issues", "◉", "Issues", "i"),
-            ("actions", "▷", "Actions / CI", "a"),
-            ("deployments", "⇧", "Deployments", "d"),
-            ("releases", "◈", "Releases", "l"),
-            ("branches", "⎇", "Branches", "b"),
-            ("commits", "●", "Commits", "c"),
-            ("search", "⌕", "Search", "/"),
-            ("settings", "⚙", "Settings", "s"),
-            ("quit", "⏻", "Quit", "q"),
-        ]
-        options = []
-        for oid, icon, label, key in items:
-            row = Text(no_wrap=True, overflow="ellipsis")
-            row.append(f"{icon}  {label}")
-            if key:
-                pad = max(1, 30 - row.cell_len - len(key))
-                row.append(" " * pad)
-                row.append(key, style="dim")
-            options.append(Option(row, id=oid))
-        return OptionList(*options, id="menu")
-
-    # ---- recent activity ----
+    def _activity_title(self) -> Table:
+        table = _grid(1, 1, padding=(0, 0))
+        table.add_row(
+            Text("recent activity  ───", style=self._c("primary")),
+            Text("(r) refresh", style="dim", justify="right"),
+        )
+        return table
 
     def _activity(self) -> Table:
         rows = [
-            ("✗", self._c("error"), "Backend Tests workflow failed", "#9182", "4m ago"),
-            (
-                "✓",
-                self._c("success"),
-                "Merge pull request #140 from feat/dashboard",
-                "main",
-                "18m ago",
-            ),
-            ("✎", self._c("primary"), "Update README.md", "main", "38m ago"),
-            (
-                "✗",
-                self._c("error"),
-                "Database migration: Add user_sessions table",
-                "#141 develop",
-                "1h ago",
-            ),
-            ("⇧", self._c("accent"), "Deploy to Production", "main", "2h ago"),
-            ("✎", self._c("primary"), "Fix payment retry logic", "#139 feat/payments", "3h ago"),
-            ("✓", self._c("success"), "Bump dependencies", "main", "5h ago"),
-            ("⇧", self._c("accent"), "feat: Add usage analytics", "#138 feat/analytics", "6h ago"),
-            ("✓", self._c("success"), "Merge pull request #137 from fix/mobile", "main", "8h ago"),
-            ("✎", self._c("primary"), "Refactor auth middleware", "#136 feat/auth", "10h ago"),
+            ("×", "error", "4m", "backend-tests workflow failed", "#9182", "workflow"),
+            ("✓", "success", "18m", "merge pull request #140 from feat/dashboard", "main", ""),
+            ("✓", "success", "38m", "update README.md", "main", ""),
+            ("!", "warning", "1h", "database migration: add user_sessions table", "#141", "develop"),
+            ("→", "success", "2h", "deploy to production", "main", "deploy"),
+            ("✓", "success", "3h", "fix payment retry logic", "#139", "feat/payments"),
+            ("✓", "success", "5h", "bump dependencies", "main", ""),
+            ("✓", "success", "6h", "feat: add usage analytics", "#138", "feat/analytics"),
         ]
-        g = _grid(1, 1, 1)
-        g.columns[0].no_wrap = True
-        g.columns[0].overflow = "ellipsis"
-        g.columns[1].justify = "left"
-        g.columns[2].justify = "right"
-        for icon, color, text, ref, when in rows:
-            line = Text()
-            line.append(f"{icon}  ", style=color)
-            line.append(text)
-            g.add_row(line, Text(ref, style="dim"), Text(when, style="dim"))
-        return g
-
-    # ---- pull requests ----
-
-    def _prs(self) -> Table:
-        prs = [
-            ("#142", "Add Google OAuth login", "feat/oauth", "2/2", "pass", "4m"),
-            ("#141", "Improve dashboard charts", "feat/dashboard", "6/6", "pass", "1h"),
-            ("#140", "Fix mobile layout issues", "fix/mobile", "6/6", "pass", "18m"),
-            ("#139", "Payment retry mechanism", "fix/payment", "6/6", "pass", "3h"),
-            ("#137", "Refactor auth middleware", "feat/auth", "5/6", "fail", "8h"),
-        ]
-        g = _grid(2, 2, 1)
-        g.columns[0].no_wrap = True
-        g.columns[0].overflow = "ellipsis"
-        g.columns[1].no_wrap = True
-        g.columns[1].overflow = "ellipsis"
-        g.columns[2].justify = "right"
-        for num, title, branch, checks, ci, when in prs:
-            left = Text()
-            left.append(f"{num}  ", style=self._c("primary"))
-            left.append(title)
-            mid = Text(f"{branch} → main", style="dim")
-            right = Text()
-            right.append(
-                checks + " ", style=self._c("success") if ci == "pass" else self._c("error")
+        table = _grid(1, 2, 13, 2, 3, padding=(0, 1))
+        for icon, color, age, event, ref, kind in rows:
+            table.add_row(
+                Text(icon, style=self._c(color)), Text(age, style="dim"),
+                Text(event, overflow="ellipsis", no_wrap=True),
+                Text(ref, style="dim", justify="right"), Text(kind, style="dim"),
             )
-            right.append(when, style="dim")
-            g.add_row(left, mid, right)
-        return g
+        return table
 
-    # ---- ci status ----
-
-    def _ci(self) -> Table:
-        runs = [
-            ("Backend Tests", "fail", "4m 12s", "4m"),
-            ("Lint & Format", "pass", "1m 03s", "6m"),
-            ("E2E Tests", "pass", "5m 41s", "12m"),
-            ("Build & Package", "pass", "2m 21s", "16m"),
-            ("Deploy Preview", "run", "3m 11s", "17s"),
-            ("Security Scan", "pass", "1m 34s", "18m"),
+    def _pull_requests(self) -> Table:
+        rows = [
+            ("#142", "Add Google OAuth login", "feat/oauth", "2/2 ✓", "4m ago"),
+            ("#141", "Improve dashboard charts", "feat/dashboard", "6/6 ✓", "1h ago"),
+            ("#140", "Fix mobile layout issues", "fix/mobile", "6/6 ✓", "18m ago"),
+            ("#139", "Payment retry mechanism", "fix/payment", "6/6 ✓", "3h ago"),
         ]
-        color = {"pass": self._c("success"), "fail": self._c("error"), "run": self._c("warning")}
-        label = {"pass": "✓ Passed", "fail": "✗ Failed", "run": "◉ Running"}
-        g = _grid(2, 1, 1)
-        g.columns[1].justify = "right"
-        g.columns[2].justify = "right"
-        for name, st, dur, when in runs:
-            n = Text()
-            n.append("● ", style=color[st])
-            n.append(name)
-            g.add_row(n, Text(label[st], style=color[st]), Text(f"{dur}  {when}", style="dim"))
-        return g
+        table = _grid(6, 2, 3, padding=(0, 0))
+        for number, title, branch, checks, age in rows:
+            left = Text(no_wrap=True, overflow="ellipsis")
+            left.append(f"{number}  ", style=self._c("primary"))
+            left.append(title)
+            right = Text(justify="right", no_wrap=True, overflow="ellipsis")
+            right.append(checks + "  ", style=self._c("success"))
+            right.append(age, style="dim")
+            table.add_row(
+                left,
+                Text(branch, style="dim", no_wrap=True, overflow="ellipsis"),
+                right,
+            )
+        table.add_row(Text("› more...", style="dim"), "", "")
+        return table
 
-    # ---- repository health ----
+    def _workflows(self) -> Table:
+        rows = [
+            ("×", "error", "backend-tests", "4m 12s"),
+            ("✓", "success", "lint & format", "1m 03s"),
+            ("✓", "success", "e2e tests", "5m 41s"),
+            ("✓", "success", "build & package", "2m 21s"),
+            ("○", "warning", "deploy preview", "running"),
+            ("✓", "success", "security scan", "1m 34s"),
+        ]
+        table = _grid(1, 7, 3, padding=(0, 0))
+        for icon, color, name, value in rows:
+            table.add_row(
+                Text(icon, style=self._c(color)), Text(name),
+                Text(value, style=self._c("warning") if value == "running" else "dim", justify="right"),
+            )
+        return table
 
-    def _health(self) -> Table:
-        g = _grid(1, 2)
-        g.add_row(Text("A-", style=f"bold {self._c('success')}"), Text(""))
-        for label, value, delta in (
-            ("Lines of Code", "24,312", "+324"),
-            ("Test Coverage", "87%", "+2%"),
-            ("Open Issues", "7", "-3"),
-            ("Open PRs", "4", "-1"),
+    def _deployments(self) -> Table:
+        rows = [
+            ("●", "success", "production", "main", "2h ago", "✓"),
+            ("○", "success", "staging", "develop", "6h ago", "✓"),
+            ("○", "warning", "preview", "#142", "running", "•••"),
+            ("○", "warning", "preview", "#141", "12m ago", "–"),
+        ]
+        table = _grid(1, 4, 3, 3, 2, padding=(0, 0))
+        for icon, color, env, branch, age, result in rows:
+            table.add_row(
+                Text(icon, style=self._c(color)), Text(env), Text(branch, style="dim"),
+                Text(age, style=self._c("warning") if age == "running" else "dim"),
+                Text(result, style=self._c(color), justify="right"),
+            )
+        return table
+
+    def _quick_commands(self) -> Text:
+        result = Text(justify="center")
+        for key, label in (
+            ("/", "search"), ("p", "prs"), ("i", "issues"), ("c", "ci"),
+            ("d", "deploys"), ("b", "branches"), ("l", "releases"),
+            ("s", "settings"), ("q", "quit"),
         ):
-            m = Text(justify="right")
-            m.append(value + "   ")
-            m.append(delta, style=self._c("success"))
-            g.add_row(Text(label, style="dim"), m)
-        g.add_row(Text("last updated: just now", style="dim"), Text(""))
-        return g
+            result.append(f"  {key}  ", style="bold")
+            result.append(f"{label}    ", style="dim")
+        return result
 
-    # ---- command palette + footer ----
+    def _command_line(self) -> Table:
+        table = _grid(1, 1, padding=(0, 0))
+        prompt = Text(": ", style=f"bold {self._c('primary')}")
+        prompt.append("█", style="bold")
+        table.add_row(prompt, Text("type ‘/’ for commands", style="dim", justify="right"))
+        return table
 
-    def _palette(self) -> Text:
-        t = Text()
-        t.append(":  ", style=self._c("primary"))
-        t.append("▌", style="dim")
-        return t
-
-    def _footer(self) -> Table:
-        g = _grid(1, 1)
-        left = Text()
-        for key, desc in (
-            ("↑/↓", "navigate"),
-            ("enter", "select"),
-            ("esc", "back"),
-            ("/", "search"),
-            ("?", "help"),
+    def _footer(self) -> Text:
+        result = Text()
+        for key, label in (
+            ("j/k", "move"), ("enter", "open"), ("r", "refresh"),
+            ("/", "commands"), ("q", "quit"),
         ):
-            left.append(f"{key} ", style=self._c("primary"))
-            left.append(f"{desc}    ", style="dim")
-        right = Text("https://github.com/musaJawad004/gh-tui", style="dim", justify="right")
-        g.add_row(left, right)
-        return g
+            result.append(f"[{key}] {label}   ", style="dim")
+        return result
 
-    # ---- navigation ----
+    def _goto_section(self, section: int) -> None:
+        from screens.main import MainScreen
 
-    def action_open_selected(self) -> None:
-        menu = self.query_one("#menu", OptionList)
-        if menu.highlighted is not None:
-            self._route(menu.get_option_at_index(menu.highlighted).id)
-
-    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
-        self._route(event.option.id)
-
-    def _route(self, option_id: str | None) -> None:
-        if option_id in SECTION_ROUTE:
-            from screens.main import MainScreen
-
-            self.app.push_screen(MainScreen(section=SECTION_ROUTE[option_id]))
-        elif option_id == "settings":
-            from screens.settings import SettingsScreen
-
-            self.app.push_screen(SettingsScreen())
-        elif option_id == "quit":
-            self.app.exit()
-        elif option_id and option_id != "overview":
-            self.notify(f"{option_id.replace('_', ' ').title()} — coming soon")
-
-    def action_goto_repositories(self) -> None:
-        self._route("repositories")
+        self.app.push_screen(MainScreen(section=section))
 
     def action_goto_pull_requests(self) -> None:
-        self._route("pull_requests")
+        self._goto_section(0)
 
     def action_goto_issues(self) -> None:
-        self._route("issues")
+        self._goto_section(1)
 
     def action_goto_actions(self) -> None:
-        self._route("actions")
+        self._goto_section(2)
 
-    def action_goto_commits(self) -> None:
-        self._route("commits")
+    def action_goto_deployments(self) -> None:
+        self.notify("Deployments · production and staging are healthy")
+
+    def action_goto_branches(self) -> None:
+        self.notify("Branches · main is 2 commits ahead")
+
+    def action_goto_releases(self) -> None:
+        self.notify("Releases · 3 published")
 
     def action_goto_settings(self) -> None:
-        self._route("settings")
+        from screens.settings import SettingsScreen
+
+        self.app.push_screen(SettingsScreen())
+
+    def action_commands(self) -> None:
+        self.app.action_help()
+
+    def action_noop(self) -> None:
+        pass
+
+    def action_refresh_dashboard(self) -> None:
+        if self._refresh_timer is not None:
+            return
+        self._refresh_frame = 0
+        self._refresh_timer = self.set_interval(0.08, self._tick_refresh)
+
+    def _tick_refresh(self) -> None:
+        self._refresh_frame += 1
+        loading = Text()
+        loading.append("\n  ")
+        loading.append_text(
+            inline_loader(
+                "Refreshing repository activity",
+                self._refresh_frame,
+                kind="refresh",
+                color=self._c("primary"),
+                command="gh-flow refresh",
+            )
+        )
+        loading.append("\n\n  ")
+        loading.append_text(
+            indeterminate_bar(self._refresh_frame, width=42, color=self._c("primary"))
+        )
+        self.query_one("#activity-list", Static).update(loading)
+        if self._refresh_frame >= 10:
+            self._refresh_timer.stop()
+            self._refresh_timer = None
+            self.query_one("#activity-list", Static).update(self._activity())
+            self.notify("Dashboard refreshed", timeout=1.5)

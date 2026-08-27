@@ -191,12 +191,14 @@ class SettingsScreen(Screen):
             self.query_one("#s-list", OptionList).replace_option_prompt(
                 sid, self._row(_LABELS[sid], self._value(sid))
             )
+            self.app.persist_settings()
 
     def _theme_picked(self, theme: str | None) -> None:
         if theme is None:
             return
         self.app.theme = theme
         self.app.settings["theme"] = theme
+        self.app.persist_settings()
         self.query_one("#s-list", OptionList).replace_option_prompt(
             "theme", self._row(_LABELS["theme"], theme)
         )

@@ -12,10 +12,10 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Static
 
-from themes.palettes import GREEN
+from themes.palettes import CYAN, GREEN
 from version import __version__
 from widgets.logo import render_logo
-from widgets.spinner import SPINNER_FRAMES
+from widgets.spinner import indeterminate_bar, step_loader
 
 STEPS = [
     "Connecting to GitHub",
@@ -42,6 +42,10 @@ class SplashScreen(Screen):
         ("enter", "skip", "Skip"),
         ("space", "skip", "Skip"),
     ]
+
+    def __init__(self, destination: str = "overview") -> None:
+        super().__init__()
+        self._destination = destination
 
     def compose(self) -> ComposeResult:
         with Vertical(id="box"):
@@ -71,17 +75,9 @@ class SplashScreen(Screen):
         self._render_steps()
 
     def _render_steps(self) -> None:
-        frame = SPINNER_FRAMES[self._frame % len(SPINNER_FRAMES)]
-        t = Text()
-        for i, label in enumerate(STEPS):
-            if i < self._step:
-                t.append("  ✓ ", style=GREEN)
-                t.append(f"{label}\n", style="dim")
-            elif i == self._step:
-                t.append(f"  {frame} ", style="bold")
-                t.append(f"{label}…\n")
-            else:
-                t.append(f"    {label}\n", style="dim")
+        t = step_loader(STEPS, self._step, self._frame, color=CYAN, success=GREEN)
+        t.append("\n\n  ")
+        t.append_text(indeterminate_bar(self._frame, width=36, color=CYAN))
         self.query_one("#steps", Static).update(t)
 
     def _finish(self) -> None:
@@ -89,9 +85,14 @@ class SplashScreen(Screen):
             return
         self._done = True
         self._timer.stop()
-        from screens.main import MainScreen
+        if self._destination in {"workspace", "pull-requests"}:
+            from screens.main import MainScreen
 
-        self.app.switch_screen(MainScreen())
+            self.app.switch_screen(MainScreen(section=0))
+        else:
+            from screens.overview import OverviewScreen
+
+            self.app.switch_screen(OverviewScreen())
 
     def action_skip(self) -> None:
         self._finish()
