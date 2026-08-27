@@ -12,7 +12,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Static
 
-from themes.palettes import CYAN, GREEN
+from themes.palettes import active_colors
 from version import __version__
 from widgets.logo import render_logo
 from widgets.spinner import indeterminate_bar, step_loader
@@ -75,9 +75,16 @@ class SplashScreen(Screen):
         self._render_steps()
 
     def _render_steps(self) -> None:
-        t = step_loader(STEPS, self._step, self._frame, color=CYAN, success=GREEN)
+        colors = active_colors(self.app)
+        t = step_loader(
+            STEPS,
+            self._step,
+            self._frame,
+            color=colors["secondary"],
+            success=colors["success"],
+        )
         t.append("\n\n  ")
-        t.append_text(indeterminate_bar(self._frame, width=36, color=CYAN))
+        t.append_text(indeterminate_bar(self._frame, width=36, color=colors["secondary"]))
         self.query_one("#steps", Static).update(t)
 
     def _finish(self) -> None:

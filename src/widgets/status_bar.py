@@ -8,11 +8,12 @@ from rich.text import Text
 from textual.widgets import Static
 
 import icons
-from themes.palettes import GREEN
+from themes.palettes import active_colors
 
 
 class StatusBar(Static):
     def on_mount(self) -> None:
+        colors = active_colors(self.app)
         t = Text()
         t.append(f" {icons.PR} PRs ", style="bold")
         t.append(f"  {icons.ISSUES} Issues ", style="dim")
@@ -20,6 +21,6 @@ class StatusBar(Static):
         t.append("     ")
         t.append(f"{icons.UPDATED} Updated ~5s ago · PR 1/3 (fetched 3)", style="dim")
         t.append("     ")
-        t.append(f"{icons.CI_PASS} ", style=GREEN)
+        t.append(f"{icons.CI_PASS} ", style=colors["success"])
         t.append('PRs for "Open Source" have loaded', style="dim")
         self.update(t)

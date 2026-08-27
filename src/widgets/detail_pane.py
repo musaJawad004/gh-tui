@@ -11,7 +11,7 @@ from textual.widgets import Static
 
 import icons
 from models.pull_request import PullRequest, humanize_count
-from themes.palettes import ACCENT_BLUE, GREEN, RED, REPO_PURPLE
+from themes.palettes import active_colors
 
 
 class DetailPane(VerticalScroll):
@@ -28,21 +28,22 @@ class DetailPane(VerticalScroll):
         yield Static(id="d-commits")
 
     def show(self, pr: PullRequest) -> None:
+        colors = active_colors(self.app)
         self.query_one("#d-repo", Static).update(
             Text.assemble((pr.repo, "dim"), ("  ·  ", "dim"), (f"#{pr.number}", "dim"))
         )
         self.query_one("#d-title", Static).update(Text(pr.title, style="bold"))
 
         badge = Text()
-        badge.append(f" {icons.PR} Open ", style=f"bold white on {ACCENT_BLUE}")
+        badge.append(f" {icons.PR} Open ", style=f"bold {colors['background']} on {colors['primary']}")
         badge.append(f"   {pr.base} ", style="dim")
         badge.append(f"{icons.ARROW} ", style="dim")
-        badge.append(pr.head, style=REPO_PURPLE)
+        badge.append(pr.head, style=colors["secondary"])
         self.query_one("#d-badge", Static).update(badge)
 
         meta = Text()
         meta.append("by ", style="dim")
-        meta.append(f"@{pr.author}", style=REPO_PURPLE)
+        meta.append(f"@{pr.author}", style=colors["secondary"])
         meta.append(f"  ·  {pr.created} ago  ·  ", style="dim")
         meta.append("none", style="dim")
         self.query_one("#d-meta", Static).update(meta)
@@ -71,8 +72,8 @@ class DetailPane(VerticalScroll):
 
         files = Text()
         files.append(f"{icons.FILES} {pr.files_changed} files changed   ")
-        files.append(f"+{humanize_count(pr.additions)} ", style=GREEN)
-        files.append(f"-{humanize_count(pr.deletions)}", style=RED)
+        files.append(f"+{humanize_count(pr.additions)} ", style=colors["success"])
+        files.append(f"-{humanize_count(pr.deletions)}", style=colors["error"])
         self.query_one("#d-files", Static).update(files)
 
         self.query_one("#d-commits", Static).update(
