@@ -13,6 +13,12 @@ from textual.binding import Binding
 
 from config import load_settings, save_settings
 from core.drafts import load_drafts, save_drafts
+from core.github_data import (
+    GhCliError,
+    detect_local_repository,
+    load_snapshot,
+    parse_repository_url,
+)
 from themes import DEFAULT_THEME, THEME_NAMES, register_themes
 
 
@@ -43,6 +49,10 @@ class GhTuiApp(App):
         self._drafts_path = drafts_path
         self.settings = load_settings(config_path)
         self.comment_drafts = load_drafts(drafts_path)
+        self.repository = parse_repository_url(self.settings.get("repository", ""))
+        self.github_snapshot = None
+        self.data_loading = False
+        self.data_error: str | None = None
         saved_theme = self.settings.get("theme")
         requested_theme = theme if theme in THEME_NAMES else saved_theme
         self.theme = requested_theme if requested_theme in THEME_NAMES else DEFAULT_THEME
@@ -91,8 +101,19 @@ class GhTuiApp(App):
     def on_mount(self) -> None:
         from screens.main import MainScreen
         from screens.overview import OverviewScreen
+        from screens.repo_setup import RepoSetupScreen
         from screens.settings import SettingsScreen
         from screens.splash import SplashScreen
+
+        if not self.repository:
+            self.repository = detect_local_repository(Path.cwd())
+            if self.repository:
+                self.settings["repository"] = self.repository
+                self.persist_settings()
+
+        if not self.repository:
+            self.push_screen(RepoSetupScreen(), self._repository_confirmed)
+            return
 
         if self._start_screen == "pull-requests":
             self.push_screen(MainScreen(section=0))
@@ -106,6 +127,51 @@ class GhTuiApp(App):
                 self.push_screen(OverviewScreen())
             else:
                 self.push_screen(SplashScreen(destination=self.settings["default_screen"]))
+        self.begin_data_load()
+
+    def begin_data_load(self) -> None:
+        """Start read-only GitHub loading in a worker; results stay in memory."""
+        if self.data_loading or not self.repository:
+            return
+        self.data_loading = True
+        self.data_error = None
+        self.run_worker(self._load_data, thread=True, exclusive=True)
+
+    def _load_data(self) -> None:
+        try:
+            snapshot = load_snapshot(self.repository, cwd=Path.cwd(), limit=self.settings.get("per_page", 30))
+        except GhCliError as exc:
+            self.call_from_thread(self._data_failed, str(exc))
+            return
+        self.call_from_thread(self._data_loaded, snapshot)
+
+    def _data_loaded(self, snapshot) -> None:
+        self.github_snapshot = snapshot
+        self.data_loading = False
+        self.data_error = None
+        refresh = getattr(self.screen, "refresh_data", None)
+        if refresh:
+            refresh()
+        self.notify(f"Loaded {snapshot.name} · read-only data", timeout=2)
+
+    def _data_failed(self, error: str) -> None:
+        self.data_loading = False
+        self.data_error = error
+        refresh = getattr(self.screen, "refresh_data", None)
+        if refresh:
+            refresh()
+        self.notify(f"GitHub data unavailable · {error}", severity="warning", timeout=3)
+
+    def _repository_confirmed(self, value: str | None) -> None:
+        if not value:
+            self.exit()
+            return
+        self.repository = value
+        self.settings["repository"] = value
+        self.persist_settings()
+        if self.screen:
+            self.pop_screen()
+        self.begin_data_load()
 
 def main() -> None:
     GhTuiApp().run()
