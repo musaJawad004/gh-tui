@@ -61,7 +61,10 @@ def _run_json(args: list[str], *, cwd: Path | None = None) -> Any:
         raise GhCliError(f"gh CLI is unavailable: {exc}") from exc
     if result.returncode:
         detail = (result.stderr or result.stdout).strip().splitlines()
-        raise GhCliError(detail[-1] if detail else "gh query failed")
+        message = detail[-1] if detail else "gh query failed"
+        if "rate limit" in message.lower() or "api rate" in message.lower():
+            message = "GitHub API rate limit exceeded; authenticate with gh or wait for reset"
+        raise GhCliError(message)
     try:
         return json.loads(result.stdout or "null")
     except json.JSONDecodeError as exc:
@@ -196,6 +199,7 @@ def load_snapshot(repository: str, *, cwd: Path | None = None, limit: int = 30) 
     snapshot.branches = _safe_query(["api", f"repos/{repo}/branches?per_page={min(limit, 30)}"], cwd=cwd, default=[])
     snapshot.commits = _safe_query(["api", f"repos/{repo}/commits?per_page={min(limit, 30)}"], cwd=cwd, default=[])
     snapshot.releases = _safe_query(["release", "list", "--repo", repo, "--limit", str(limit), "--json", "tagName,name,isLatest,publishedAt"], cwd=cwd, default=[])
-    owner = repo.split("/", 1)[0]
-    snapshot.repositories = _safe_query(["repo", "list", owner, "--limit", str(limit), "--json", "nameWithOwner,name,isPrivate,primaryLanguage,stargazerCount,updatedAt"], cwd=cwd, default=[])
+    # Repo Manager is intentionally scoped to the configured repository; avoid an
+    # unnecessary owner-wide listing (and its extra rate-limit cost).
+    snapshot.repositories = []
     return snapshot
