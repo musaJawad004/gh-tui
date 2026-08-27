@@ -13,13 +13,19 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.events import Resize
+from textual.events import Key, Resize
 from textual.screen import Screen
 from textual.widgets import Static, TextArea
 
 from themes.palettes import active_colors
 from widgets.spinner import indeterminate_bar, inline_loader, spinner_frame
-from widgets.terminal_charts import donut_chart, line_plot
+from widgets.terminal_charts import (
+    contribution_calendar,
+    donut_chart,
+    horizontal_bars,
+    line_plot,
+    vertical_bars,
+)
 
 SECTIONS = ["Pull Requests", "Issues", "CI / CD", "Repos", "Commits"]
 PR_IDS = ("#142", "#141", "#140", "#139")
@@ -46,6 +52,13 @@ class CommentEditor(TextArea):
     def on_blur(self) -> None:
         self.can_focus = False
 
+    def on_key(self, event: Key) -> None:
+        # Standard terminals encode Ctrl+M as Enter. When an @mention fragment is
+        # active, consume that carriage return as completion instead of a newline.
+        if event.key == "enter" and self.screen._complete_mention(self):
+            event.prevent_default()
+            event.stop()
+
 
 class MainScreen(Screen):
     """A dense terminal workspace with a navigator and contextual detail pane."""
@@ -71,6 +84,8 @@ class MainScreen(Screen):
         overflow: hidden hidden;
         background: $background;
     }
+    MainScreen #navigator-content { height: 1fr; overflow: hidden hidden; }
+    MainScreen #navigator-analytics { height: auto; }
     MainScreen #detail {
         width: 58%;
         height: 1fr;
@@ -128,6 +143,7 @@ class MainScreen(Screen):
     MainScreen.compact #navigator,
     MainScreen.compact #detail { padding: 0 1; }
     MainScreen.compact #comment-editor { height: 4; margin-bottom: 0; }
+    MainScreen.compact #navigator-analytics { display: none; }
     MainScreen.too-small #header,
     MainScreen.too-small #workspace,
     MainScreen.too-small #status { display: none; }
@@ -167,6 +183,7 @@ class MainScreen(Screen):
         with Horizontal(id="workspace"):
             with Vertical(id="navigator"):
                 yield Static(id="navigator-content")
+                yield Static(id="navigator-analytics")
             with Vertical(id="detail"):
                 yield Static(id="detail-content")
                 yield CommentEditor(
@@ -249,6 +266,7 @@ class MainScreen(Screen):
         ]
         left, right, status = renderers[self._section]()
         self.query_one("#navigator-content", Static).update(left)
+        self.query_one("#navigator-analytics", Static).update(self._section_analytics())
         self.query_one("#detail-content", Static).update(right)
         self.query_one("#status", Static).update(status)
         self._configure_comment_editor()
@@ -378,6 +396,67 @@ class MainScreen(Screen):
         table.add_row(left, right)
         return Panel(table, title="analytics", border_style=self._c("border"), padding=(0, 1))
 
+    def _section_analytics(self):
+        """Return a distinct bottom-anchored visualization for the active section."""
+        navigator_ratio = 0.36 if self.size.width >= 180 and self.size.height >= 50 else 0.40
+        width = max(30, int(self.size.width * navigator_ratio) - 6)
+        if self._section == 0:
+            return self._analytics(
+                ("merge rate", (42, 56, 51, 68, 72, 81, 76), "76% · last 7 days", "success"),
+                ("pull request state", (4, 18, 3), "4 open · 18 merged · 3 closed", "primary"),
+            )
+        if self._section == 1:
+            chart = donut_chart(
+                (7, 24, 5),
+                "36 tracked issues",
+                (self._c("warning"), self._c("success"), self._c("error")),
+                width=min(31, width - 4),
+                height=9,
+                labels=("open", "closed", "blocked"),
+            )
+            centered = Table.grid(expand=True)
+            centered.add_column(justify="center")
+            centered.add_row(chart)
+            return Panel(centered, title="issue distribution", border_style=self._c("border"))
+        if self._section == 2:
+            return Panel(
+                horizontal_bars(
+                    ("passed", "failed", "running"),
+                    (19, 3, 1),
+                    (self._c("success"), self._c("error"), self._c("warning")),
+                    "23 workflow runs · 95% success",
+                    width=width - 4,
+                ),
+                title="workflow outcomes",
+                border_style=self._c("border"),
+                padding=(1, 1),
+            )
+        if self._section == 3:
+            return Panel(
+                vertical_bars(
+                    (4, 7, 3, 9, 12, 8, 14),
+                    ("M", "T", "W", "T", "F", "S", "S"),
+                    "57 commits · repository activity",
+                    self._c("primary"),
+                    width=width - 4,
+                    height=6,
+                ),
+                title="repository activity",
+                border_style=self._c("border"),
+                padding=(0, 1),
+            )
+        return Panel(
+            contribution_calendar(
+                "57 commits · main ↑2",
+                self._c("success"),
+                width=width - 4,
+                height=9,
+            ),
+            title="commit contributions",
+            border_style=self._c("border"),
+            padding=(0, 1),
+        )
+
     def _pull_requests(self):
         rows = [
             ("#142", "Add Google OAuth login", "feat/oauth", "✓", "2/2", "+391  -4", "4m"),
@@ -412,11 +491,6 @@ class MainScreen(Screen):
             self._search("is:pr is:open author:@me", "4 open"),
             Text("\n"),
             table,
-            Text("\n"),
-            self._analytics(
-                ("merge rate", (42, 56, 51, 68, 72, 81, 76), "76% · last 7 days", "success"),
-                ("pull request state", (4, 18, 3), "4 open · 18 merged · 3 closed", "primary"),
-            ),
         )
 
         number, title, branch, _ci, checks, changes, age = rows[selected]
@@ -474,11 +548,6 @@ class MainScreen(Screen):
             self._search("is:issue is:open", "7 open"),
             Text("\n"),
             table,
-            Text("\n"),
-            self._analytics(
-                ("resolution rate", (31, 48, 44, 62, 58, 73, 79), "79% · last 7 days", "warning"),
-                ("issue state", (7, 24, 5), "7 open · 24 closed · 5 blocked", "primary"),
-            ),
         )
 
         number, title, labels, comments, age = rows[selected]
@@ -539,11 +608,6 @@ class MainScreen(Screen):
             self._search("branch:main event:push", "23 runs"),
             Text("\n"),
             table,
-            Text("\n"),
-            self._analytics(
-                ("success rate", (91, 86, 94, 88, 96, 91, 95), "95% · last 7 days", "success"),
-                ("run outcomes", (19, 3, 1), "19 passed · 3 failed · 1 running", "warning"),
-            ),
         )
 
         _icon, name, branch, state, duration, age = rows[selected]
@@ -619,11 +683,6 @@ class MainScreen(Screen):
             self._search("owner:musa", "6 repos"),
             Text("\n"),
             table,
-            Text("\n"),
-            self._analytics(
-                ("commit activity", (4, 7, 3, 9, 12, 8, 14), "57 commits · 7 days", "primary"),
-                ("repository health", (82, 87, 91, 89), "A- · 89/100", "success"),
-            ),
         )
         name, lang, visibility, stars, age = rows[selected]
         info = Text()
@@ -671,11 +730,6 @@ class MainScreen(Screen):
         left = Group(
             tree,
             Text("\n  8 files   +386 additions   -83 deletions", style="dim"),
-            Text("\n"),
-            self._analytics(
-                ("commit graph", (3, 5, 4, 8, 6, 11, 9), "main ─●─●─●  ↑2", "primary"),
-                ("change volume", (84, 31, 198, 16, 41, 16, 12), "+386 · -83", "success"),
-            ),
         )
 
         head = Text()
@@ -858,6 +912,14 @@ class MainScreen(Screen):
             return
         self.action_focus_comment()
         editor = self.query_one("#comment-editor", CommentEditor)
+        if self._complete_mention(editor):
+            return
+        mention = LOCAL_MENTIONS[self._mention_index % len(LOCAL_MENTIONS)]
+        self._mention_index += 1
+        editor.insert(mention)
+
+    def _complete_mention(self, editor: TextArea) -> bool:
+        """Replace the @fragment at the cursor, returning whether one was found."""
         row, column = editor.cursor_location
         line = editor.document.get_line(row)
         start = column
@@ -870,10 +932,8 @@ class MainScreen(Screen):
             matches = [mention for mention in LOCAL_MENTIONS if mention.startswith(fragment)]
             mention = matches[0] if matches else LOCAL_MENTIONS[0]
             editor.replace(mention, (row, start), (row, column))
-        else:
-            mention = LOCAL_MENTIONS[self._mention_index % len(LOCAL_MENTIONS)]
-            self._mention_index += 1
-            editor.insert(mention)
+            return True
+        return False
 
     def action_back_to_list(self) -> None:
         editor = self.query_one("#comment-editor", TextArea)

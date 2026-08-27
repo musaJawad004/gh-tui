@@ -67,14 +67,17 @@ def test_terminal_charts_have_real_axes_and_multiple_rows():
     assert "More" in calendar_output
 
 
-def test_mention_shortcut_replaces_partial_mention_without_trailing_space(tmp_path):
+def test_terminal_ctrl_m_alias_completes_partial_mention_without_newline(tmp_path):
     async def run() -> None:
         app = GhTuiApp(start_screen="workspace", drafts_path=tmp_path / "drafts.yml")
         async with app.run_test(size=(140, 40)) as pilot:
-            await pilot.press("e", "@", "d", "l", "ctrl+m")
+            # Real terminals transmit Ctrl+M as Enter (carriage return), so exercise
+            # that exact path rather than Textual's synthetic ctrl+m key name.
+            await pilot.press("e", "@", "d", "l", "enter")
             editor = app.screen.query_one("#comment-editor")
             assert editor.text == "@dlvhdr"
             assert not editor.text.endswith(" ")
+            assert "\n" not in editor.text
 
     asyncio.run(run())
 
@@ -88,5 +91,24 @@ def test_home_dashboard_exposes_all_analytics_panels():
             assert app.screen.query_one("#success-chart")
             assert app.screen.query_one("#state-chart")
             assert app.screen.query_one("#commit-chart")
+
+    asyncio.run(run())
+
+
+def test_workspace_uses_distinct_bottom_anchored_charts(tmp_path):
+    async def run() -> None:
+        app = GhTuiApp(start_screen="workspace", drafts_path=tmp_path / "drafts.yml")
+        async with app.run_test(size=(200, 60)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            titles = set()
+            for section in range(5):
+                screen._section = section
+                screen._render_workspace()
+                navigator = screen.query_one("#navigator")
+                analytics = screen.query_one("#navigator-analytics")
+                assert analytics.region.bottom == navigator.content_region.bottom
+                titles.add(str(analytics.content.title))
+            assert len(titles) == 5
 
     asyncio.run(run())
