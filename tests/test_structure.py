@@ -14,7 +14,14 @@ SRC = ROOT / "src"
 
 EXPECTED_PACKAGES = ["core", "models", "screens", "widgets", "analysis", "themes"]
 EXPECTED_MODULES = ["app.py", "config.py", "__main__.py", "app.tcss"]
-EXPECTED_DOCS = ["README.md", "ARCHITECTURE.md", "ROADMAP.md", "FEATURES.md", "LICENSE"]
+EXPECTED_DOCS = [
+    "README.md",
+    "ARCHITECTURE.md",
+    "ROADMAP.md",
+    "FEATURES.md",
+    "LOCAL_DRAFTS.md",
+    "LICENSE",
+]
 
 
 @pytest.mark.parametrize("pkg", EXPECTED_PACKAGES)
