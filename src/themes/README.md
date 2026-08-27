@@ -1,6 +1,6 @@
 # Theming
 
-gh-tui ships **25 themes** — light, dark, restrained, and colorful schemes — selectable
+gh-tui ships **20 themes** — curated dark terminal schemes — selectable
 from the visual Settings picker, `ctrl+t`, or `--theme NAME`. This folder defines them.
 
 ## How it works (Textual model)
@@ -48,10 +48,11 @@ Every theme (light and dark) must define all of these so the UI stays legible in
 
 ## Built-in themes
 
-Run `gh-tui --list-themes` for the authoritative list. It includes GitHub-inspired dark
-and light defaults plus Tokyo Night, Dracula, Nord, Gruvbox, Catppuccin, Solarized,
-One Dark, Monokai, Rosé Pine, Ayu, Night Owl, Everforest, Kanagawa, Synthwave, Material
-Ocean, and PaperColor variants.
+Run `gh-tui --list-themes` for the authoritative list:
+
+`gh-flow`, `linear`, `codex`, `claude`, `notion`, `apple`, `github-dark`, `tokyo-night`,
+`catppuccin-mocha`, `gruvbox-dark`, `dracula`, `nord`, `one-dark`, `solarized-dark`,
+`monokai`, `ayu-dark`, `rose-pine`, `kanagawa`, `matrix`, and `mono`.
 
 ## Add a theme
 

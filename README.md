@@ -106,7 +106,7 @@ location, privacy behavior, `@mention` assistance, and keyboard controls.
 
 ## Themes
 
-There are 25 built-in light, dark, minimal, and colorful schemes. Colors are semantic
+There are 20 built-in dark terminal schemes. Colors are semantic
 tokens resolved by the active theme, including inline status/diff colors. Pick visually in
 Settings, press `ctrl+t` to cycle, pass `--theme NAME`, or run `--list-themes`.
 See [`src/themes/README.md`](src/themes/README.md).
@@ -127,7 +127,7 @@ pytest                              # structure tests should pass
 python src/                         # launch (runs src/__main__.py)
 # or, after the editable install:
 gh-tui
-gh-tui --list-themes                # print all 25 schemes
+gh-tui --list-themes                # print all 20 schemes
 ```
 
 ## License

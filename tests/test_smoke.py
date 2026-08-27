@@ -6,6 +6,7 @@ from app import GhTuiApp
 from screens.main import MainScreen
 from screens.overview import OverviewScreen
 from themes import THEME_NAMES
+from themes.palettes import palette_colors
 
 
 def test_app_boots_into_workspace():
@@ -21,16 +22,45 @@ def test_app_boots_into_workspace():
     asyncio.run(run())
 
 
-def test_all_25_themes_register():
+def test_all_20_themes_register():
     async def run() -> None:
-        app = GhTuiApp(theme="papercolor-light", start_screen="workspace")
+        app = GhTuiApp(theme="codex", start_screen="workspace")
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            assert len(THEME_NAMES) == 25
+            assert len(THEME_NAMES) == 20
             assert set(THEME_NAMES) <= set(app.available_themes)
-            assert app.theme == "papercolor-light"
+            assert app.theme == "codex"
 
     asyncio.run(run())
+
+
+def test_theme_registry_matches_the_requested_palette_set():
+    assert THEME_NAMES == [
+        "gh-flow",
+        "linear",
+        "codex",
+        "claude",
+        "notion",
+        "apple",
+        "github-dark",
+        "tokyo-night",
+        "catppuccin-mocha",
+        "gruvbox-dark",
+        "dracula",
+        "nord",
+        "one-dark",
+        "solarized-dark",
+        "monokai",
+        "ayu-dark",
+        "rose-pine",
+        "kanagawa",
+        "matrix",
+        "mono",
+    ]
+    assert palette_colors("gh-flow")["background"] == "#050706"
+    assert palette_colors("gh-flow")["primary"] == "#3DDC84"
+    assert palette_colors("codex")["primary"] == "#10A37F"
+    assert palette_colors("mono")["error"] == "#FFFFFF"
 
 
 def test_default_splash_opens_reference_dashboard():
