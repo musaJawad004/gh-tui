@@ -238,13 +238,17 @@ class OverviewScreen(Screen):
     def refresh_theme(self) -> None:
         self.refresh(recompose=True)
 
+    def refresh_data(self) -> None:
+        """Recompose the dashboard after the read-only GitHub snapshot arrives."""
+        self.refresh(recompose=True)
+
     def _masthead(self) -> Table:
         table = _grid(3, 2)
         left = Text()
         left.append("gh-flow", style=f"bold {self._c('success')}")
         left.append("  v0.1.0        ", style="dim")
         left.append("⑂  ", style="bold")
-        left.append("musa/my-app", style=self._c("primary"))
+        left.append(self.app.repository or "no repository", style=self._c("primary"))
         left.append("      main", style=self._c("success"))
         left.append("  ↑2", style="dim")
 
@@ -259,24 +263,32 @@ class OverviewScreen(Screen):
     def _repo_summary(self) -> Table:
         table = _grid(3, 3, 3, 9)
         repo = Text("repo:  ", style="dim")
-        repo.append("musa/my-app", style=self._c("primary"))
+        repo.append(self.app.repository or "no repository", style=self._c("primary"))
         branch = Text("branch:  ", style="dim")
         branch.append("main", style=self._c("success"))
         branch.append("  ↑2", style="dim")
         status = Text("status:  ", style="dim")
         status.append("clean", style=self._c("success"))
 
-        counts = Text(justify="right")
-        for label, value, color in (
+        counts_text = Text(justify="right")
+        snapshot = self.app.github_snapshot
+        count_items = (
+            ("PR", f"{len(snapshot.pull_requests)} open", "primary"),
+            ("Issues", str(len(snapshot.issues)), "warning"),
+            ("CI", str(len(snapshot.workflows)), "error"),
+            ("Deploy", str(len(snapshot.deployments)), "success"),
+            ("Releases", str(len(snapshot.releases)), "primary"),
+        ) if snapshot else (
             ("PR", "4 open", "primary"), ("Issues", "7", "warning"),
             ("CI", "✕ 1", "error"), ("Deploy", "2", "success"),
             ("Releases", "3", "primary"),
-        ):
-            if counts:
-                counts.append("  ·  ", style="dim")
-            counts.append(f"{label} ", style="dim")
-            counts.append(value, style=self._c(color))
-        table.add_row(repo, branch, status, counts)
+        )
+        for label, value, color in count_items:
+            if counts_text:
+                counts_text.append("  ·  ", style="dim")
+            counts_text.append(f"{label} ", style="dim")
+            counts_text.append(value, style=self._c(color))
+        table.add_row(repo, branch, status, counts_text)
         return table
 
     def _activity_title(self) -> Table:
@@ -298,6 +310,8 @@ class OverviewScreen(Screen):
             ("✓", "success", "5h", "bump dependencies", "main", ""),
             ("✓", "success", "6h", "feat: add usage analytics", "#138", "feat/analytics"),
         ]
+        if self.app.github_snapshot:
+            rows = self.app.github_snapshot.activity_rows() or rows
         table = _grid(1, 2, 13, 2, 3, padding=(0, 1))
         for icon, color, age, event, ref, kind in rows:
             table.add_row(
@@ -314,6 +328,11 @@ class OverviewScreen(Screen):
             ("#140", "Fix mobile layout issues", "fix/mobile", "6/6 ✓", "18m ago"),
             ("#139", "Payment retry mechanism", "fix/payment", "6/6 ✓", "3h ago"),
         ]
+        if self.app.github_snapshot:
+            rows = [
+                (number, title, branch, f"{checks} ✓", f"{age} ago")
+                for number, title, branch, _ci, checks, _changes, age in self.app.github_snapshot.pr_rows()
+            ] or rows
         table = _grid(6, 2, 3, padding=(0, 0))
         for number, title, branch, checks, age in rows:
             left = Text(no_wrap=True, overflow="ellipsis")
@@ -339,6 +358,11 @@ class OverviewScreen(Screen):
             ("○", "warning", "deploy preview", "running"),
             ("✓", "success", "security scan", "1m 34s"),
         ]
+        if self.app.github_snapshot:
+            rows = [
+                (icon, "error" if state == "failed" else "warning" if state == "running" else "success", name, duration)
+                for icon, name, _branch, state, duration, age in self.app.github_snapshot.workflow_rows()
+            ] or rows
         table = _grid(1, 7, 3, padding=(0, 0))
         for icon, color, name, value in rows:
             table.add_row(
@@ -354,6 +378,8 @@ class OverviewScreen(Screen):
             ("○", "warning", "preview", "#142", "running", "•••"),
             ("○", "warning", "preview", "#141", "12m ago", "–"),
         ]
+        if self.app.github_snapshot:
+            rows = self.app.github_snapshot.deployment_rows() or rows
         table = _grid(1, 4, 3, 3, 2, padding=(0, 0))
         for icon, color, env, branch, age, result in rows:
             table.add_row(

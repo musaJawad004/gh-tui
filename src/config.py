@@ -20,6 +20,7 @@ DEFAULT_SETTINGS: dict = {
     "per_page": 30,
     "default_owner": "musaJawad004",
     "base_branch": "main",
+    "repository": "",
 }
 
 

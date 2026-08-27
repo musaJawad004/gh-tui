@@ -17,6 +17,7 @@ from textual.events import Key, Resize
 from textual.screen import Screen
 from textual.widgets import Static, TextArea
 
+from core.github_data import relative_time
 from themes.palettes import active_colors
 from widgets.spinner import indeterminate_bar, inline_loader, spinner_frame
 from widgets.terminal_charts import (
@@ -27,7 +28,7 @@ from widgets.terminal_charts import (
     vertical_bars,
 )
 
-SECTIONS = ["Pull Requests", "Issues", "CI / CD", "Repos", "Commits"]
+SECTIONS = ["Pull Requests", "Issues", "CI / CD", "Repo Manager", "Commits"]
 PR_IDS = ("#142", "#141", "#140", "#139")
 ISSUE_IDS = ("#87", "#85", "#84", "#80", "#78")
 LOCAL_MENTIONS = ("@musa", "@dlvhdr", "@sarah", "@reviewers")
@@ -249,6 +250,10 @@ class MainScreen(Screen):
     def refresh_theme(self) -> None:
         self._render_workspace()
 
+    def refresh_data(self) -> None:
+        """Refresh visible renderables after the read-only gh worker completes."""
+        self._render_workspace()
+
     def _c(self, name: str) -> str:
         return active_colors(self.app)[name]
 
@@ -329,10 +334,10 @@ class MainScreen(Screen):
     def _render_header(self) -> None:
         line = Text()
         line.append(" gh-flow ", style=f"bold {self._c('background')} on {self._c('success')}")
-        line.append("  musa/my-app", style=self._c("primary"))
+        line.append(f"  {self.app.repository or 'no repository'}", style=self._c("primary"))
         line.append("  main ↑2", style=self._c("success"))
         line.append("  ·  clean\n", style="dim")
-        labels = ["PRs", "Issues", "CI", "Repos", "Commits"] if self.size.width < 90 else SECTIONS
+        labels = ["PRs", "Issues", "CI", "Repo", "Commits"] if self.size.width < 90 else SECTIONS
         for index, name in enumerate(labels):
             if index:
                 line.append("  │  ", style="dim")
@@ -465,6 +470,8 @@ class MainScreen(Screen):
             ("#140", "Fix mobile layout issues", "fix/mobile", "✓", "6/6", "+48  -12", "18m"),
             ("#139", "Payment retry mechanism", "fix/payment", "✓", "6/6", "+92  -31", "3h"),
         ]
+        if self.app.github_snapshot:
+            rows = self.app.github_snapshot.pr_rows() or rows
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=6)
@@ -534,6 +541,8 @@ class MainScreen(Screen):
             ("#80", "Document the config file", "docs · good first issue", "3", "1d"),
             ("#78", "Flaky E2E on checkout step", "bug · ci", "6", "1d"),
         ]
+        if self.app.github_snapshot:
+            rows = self.app.github_snapshot.issue_rows() or rows
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=6)
@@ -590,6 +599,8 @@ class MainScreen(Screen):
             ("○", "deploy preview", "feat/oauth", "running", "3m 11s", "now"),
             ("✓", "security scan", "main", "passed", "1m 34s", "18m"),
         ]
+        if self.app.github_snapshot:
+            rows = self.app.github_snapshot.workflow_rows() or rows
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=3)
@@ -665,6 +676,8 @@ class MainScreen(Screen):
             ("musa/emberflow", "Go", "public", "64", "5d"),
             ("musa/job-agent", "Python", "private", "0", "1w"),
         ]
+        if self.app.github_snapshot:
+            rows = self.app.github_snapshot.repo_rows() or rows
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(ratio=1)
@@ -693,13 +706,58 @@ class MainScreen(Screen):
         info.append(f"{lang}  ·  MIT  ·  {visibility}  ·  ★ {stars}\n\n", style="dim")
         info.append("4 pull requests   7 issues   3 releases\n")
         info.append("CI passing   production healthy", style=self._c("success"))
+        if self.app.github_snapshot:
+            branches = ", ".join(
+                branch.get("name", "") for branch in self.app.github_snapshot.branches[:5]
+            )
+            if branches:
+                info.append(f"\n\nbranches  {branches}", style="dim")
         tree = Text("▾ src\n  ▾ screens\n    overview.py\n    main.py\n  ▾ widgets\n    spinner.py\n  app.py\n▸ tests\nREADME.md", style="dim")
-        right = Group(info, Text("\n repository tree", style=self._c("primary")), Panel(tree, border_style=self._c("border")))
+        actions = Text()
+        actions.append("read-only loading phase\n", style=self._c("warning"))
+        actions.append("○ create repository\n○ create branch\n○ commit & push\n○ open pull request\n○ open issue", style="dim")
+        right = Group(
+            info,
+            Text("\n repository tree", style=self._c("primary")),
+            Panel(tree, border_style=self._c("border")),
+            Text("\n planned actions", style=self._c("primary")),
+            Panel(actions, border_style=self._c("border")),
+        )
         return left, right, self._status(
             f"Repo {selected + 1}/{len(rows)}", "main ↑2", "clean", f"updated {age}"
         )
 
     def _commits(self):
+        snapshot_commits = self.app.github_snapshot.commit_rows() if self.app.github_snapshot else []
+        if snapshot_commits:
+            selected = min(self._selection(), len(snapshot_commits) - 1)
+            tree = Text()
+            tree.append(f"⌕  {len(snapshot_commits)} recent commits\n\n", style="dim")
+            for index, item in enumerate(snapshot_commits):
+                commit = item.get("commit") or {}
+                message = (commit.get("message") or "commit").splitlines()[0]
+                sha = (item.get("sha") or "unknown")[:7]
+                author = (commit.get("author") or {}).get("name") or "unknown"
+                row = Text(f"{sha}  {message}")
+                row.append(f"  ·  {author}", style="dim")
+                if index == selected:
+                    row.stylize(f"bold on {self._c('row_selected')}")
+                tree.append_text(row)
+                tree.append("\n")
+            selected_item = snapshot_commits[selected]
+            selected_commit = selected_item.get("commit") or {}
+            sha = (selected_item.get("sha") or "unknown")[:7]
+            message = (selected_commit.get("message") or "commit").splitlines()[0]
+            author = (selected_commit.get("author") or {}).get("name") or "unknown"
+            right = Group(
+                Text(f"Commit {sha}\n", style=self._c("primary")),
+                Text(f"{message}\n", style="bold"),
+                Text(f"@{author}  ·  {relative_time(selected_commit.get('committer', {}).get('date'))}  ·  {self.app.repository}\n", style="dim"),
+                Panel(Text("Commit details loaded read-only from GitHub.\nNo changes are written while browsing."), border_style=self._c("border")),
+            )
+            return Group(tree, Text(f"\n  {len(snapshot_commits)} commits loaded", style="dim")), right, self._status(
+                f"Commit {selected + 1}/{len(snapshot_commits)}", "read-only", "loaded", self.app.repository or ""
+            )
         tree = Text()
         tree.append("⌕  Filter files                         8 changed\n\n", style="dim")
         file_rows = [
@@ -817,6 +875,10 @@ class MainScreen(Screen):
             else "     [j/k] select  [enter] detail  [e] edit  [esc] done  [ctrl+s] local save  [tab] section  [o] overview  [q] quit"
         )
         result.append(controls, style="dim")
+        if self.app.data_loading:
+            result.append("   ·   loading GitHub…", style=self._c("primary"))
+        elif self.app.data_error:
+            result.append("   ·   gh unavailable (local preview)", style=self._c("warning"))
         return result
 
     def _set_section(self, section: int) -> None:
