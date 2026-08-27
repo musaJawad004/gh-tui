@@ -12,3 +12,11 @@ settings and local drafts are the only files written by the app.
 The future Repo Manager actions (create repo, branches, commits, pushes, pull requests,
 and issues) are intentionally presented as disabled/planned UI until their confirmation
 flows are implemented.
+
+## Rate-limit policy
+
+The loader follows the same broad pattern used by `gh-dash`: bounded fetches, one shared
+process, and a 30-minute in-memory snapshot TTL. Switching screens does not refetch the
+same repository. An explicit refresh bypasses the TTL once. Failed authentication is
+reported directly (`gh auth login -h github.com`) and rate-limit failures stop rather than
+retrying in a loop. The cache is process-local and contains no credentials.

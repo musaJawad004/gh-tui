@@ -25,10 +25,12 @@ def test_load_snapshot_uses_read_only_queries(monkeypatch):
 
     def fake_run(args, **kwargs):
         calls.append(args)
-        if args[1:3] == ["repo", "view"]:
-            payload = '{"nameWithOwner":"acme/demo","name":"demo"}'
-        elif args[1:3] == ["pr", "list"]:
-            payload = '[{"number":1,"title":"Improve UI","headRefName":"feat/ui","updatedAt":"2026-08-27T00:00:00Z"}]'
+        if args[1:3] == ["api", "repos/acme/demo"]:
+            payload = '{"full_name":"acme/demo","name":"demo","default_branch":"main"}'
+        elif "pulls?" in args[2]:
+            payload = '[{"number":1,"title":"Improve UI","head":{"ref":"feat/ui"},"updated_at":"2026-08-27T00:00:00Z"}]'
+        elif "actions/runs" in args[2]:
+            payload = '{"workflow_runs":[]}'
         else:
             payload = "[]"
         return CompletedProcess(args, 0, payload, "")

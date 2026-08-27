@@ -85,8 +85,8 @@ class MainScreen(Screen):
         overflow: hidden hidden;
         background: $background;
     }
-    MainScreen #navigator-content { height: 1fr; overflow: hidden hidden; }
-    MainScreen #navigator-analytics { height: auto; }
+    MainScreen #navigator-content { height: 1fr; overflow-y: auto; overflow-x: hidden; }
+    MainScreen #navigator-analytics { height: 14; min-height: 14; overflow: hidden hidden; }
     MainScreen #detail {
         width: 58%;
         height: 1fr;
@@ -166,6 +166,7 @@ class MainScreen(Screen):
         ("down", "selection_down", ""),
         ("up", "selection_up", ""),
         ("enter", "open_detail", "Open"),
+        ("n", "load_more", "Load more"),
         ("e", "focus_comment", "Comment"),
         ("escape", "back_to_list", "Back"),
         ("o", "overview", "Overview"),
@@ -271,6 +272,11 @@ class MainScreen(Screen):
             self._commits,
         ]
         left, right, status = renderers[self._section]()
+        snapshot = self.app.github_snapshot
+        if snapshot is not None and not self.app.data_error:
+            counts = [len(snapshot.pull_requests), len(snapshot.issues), len(snapshot.workflows), 0, len(snapshot.commits)]
+            if counts[self._section] > 0:
+                self._item_counts[self._section] = counts[self._section]
         self.query_one("#navigator-content", Static).update(left)
         self.query_one("#navigator-analytics", Static).update(self._section_analytics())
         self.query_one("#detail-content", Static).update(right)
@@ -355,15 +361,9 @@ class MainScreen(Screen):
         return Panel(content, border_style=self._c("border"), padding=(0, 1))
 
     def _analytics(self, first: tuple, second: tuple) -> Panel:
-        compact = self.size.height < 38
-        navigator_ratio = 0.36 if self.size.width >= 180 and self.size.height >= 50 else 0.40
-        navigator_width = int(self.size.width * navigator_ratio)
-        chart_space = max(35, navigator_width - 8)
-        line_space = round(chart_space * 0.60)
-        donut_space = chart_space - line_space
-        plot_width = max(16, min(42, line_space - 6))
-        donut_width = max(13, min(21, donut_space - 2))
-        plot_height = 6 if compact else 8
+        plot_width = 28
+        donut_width = 21
+        plot_height = 7
         table = _grid(3, 2, padding=(0, 2))
         first_title, first_values, first_summary, first_color = first
         second_title, second_values, second_summary, second_color = second
@@ -395,7 +395,7 @@ class MainScreen(Screen):
                     self._c("error"),
                 ),
                 width=donut_width,
-                height=7 if compact else 9,
+                height=9,
                 labels=legend_labels,
             ),
         )
@@ -522,24 +522,42 @@ class MainScreen(Screen):
 
         number, title, branch, _ci, checks, changes, age = rows[selected]
         meta = Text()
-        meta.append(f"musa/my-app  ·  {number}\n", style=self._c("primary"))
-        meta.append(f"{title}\n", style="bold")
+        meta.append(f"{self.app.repository or 'repository'}  ·  {number}\n", style=self._c("primary"))
+        detail = self.app.detail_data if self.app.detail_data and self.app.detail_data.get("number") == int(number.lstrip("#")) else None
+        if self.app.detail_loading:
+            meta.append("Loading pull request details…\n", style=self._c("primary"))
+        meta.append((detail or {}).get("title", title) + "\n", style="bold")
         meta.append("\n OPEN ", style=f"bold {self._c('background')} on {self._c('primary')}")
         meta.append(f"  {branch} → main  ·  by @musa  ·  {age} ago\n", style="dim")
         meta.append(f"\n▣ Overview   ✓ Checks {checks}   ◇ Files changed 8   ◌ Activity", style="bold")
 
         summary = Text()
         summary.append("Ready for review\n", style=f"bold {self._c('success')}")
-        summary.append(f"{title} is ready for a focused review before merge.\n\n")
-        added, removed = changes.split("  ")
+        summary.append(f"{(detail or {}).get('body') or title + ' is ready for a focused review before merge.'}\n\n")
+        added = f"+{(detail or {}).get('additions', 0)}"
+        removed = f"-{(detail or {}).get('deletions', 0)}"
         summary.append(f"{added} additions   ", style=self._c("success"))
         summary.append(f"{removed} deletions   ", style=self._c("error"))
-        summary.append("8 files changed", style="dim")
+        files_changed = next((item.get("changedFiles") for item in (self.app.github_snapshot.pull_requests if self.app.github_snapshot else []) if f"#{item.get('number')}" == number), 0)
+        summary.append(f"{files_changed or 0} files changed", style="dim")
 
         comment = Text()
-        comment.append("@sarah  ·  reviewer  ·  2m\n", style="bold")
-        comment.append("The callback flow looks clean. One small question about token expiry, ")
-        comment.append("otherwise this is ready to merge.", style="dim")
+        if detail:
+            comments = detail.get("comments_data") or []
+            reviews = detail.get("reviews_data") or []
+            if comments or reviews:
+                for item in (comments + reviews)[-5:]:
+                    author = (item.get("user") or {}).get("login", "unknown")
+                    comment.append(f"@{author}  ·  {item.get('created_at', '')}\n", style="bold")
+                    comment.append(f"{item.get('body', '')}\n\n", style="dim")
+            else:
+                comment.append("No review activity returned.\n", style="dim")
+        elif self.app.github_snapshot is not None:
+            comment.append("Open the detail to fetch review activity…", style="dim")
+        else:
+            comment.append("@sarah  ·  reviewer  ·  2m\n", style="bold")
+            comment.append("The callback flow looks clean. One small question about token expiry, ")
+            comment.append("otherwise this is ready to merge.", style="dim")
 
         right = Group(
             meta,
@@ -583,21 +601,30 @@ class MainScreen(Screen):
 
         number, title, labels, comments, age = rows[selected]
         header = Text()
-        header.append(f"musa/my-app  ·  Issue {number}\n", style=self._c("primary"))
-        header.append(f"{title}\n", style="bold")
+        header.append(f"{self.app.repository or 'repository'}  ·  Issue {number}\n", style=self._c("primary"))
+        detail = self.app.detail_data if self.app.detail_data and self.app.detail_data.get("number") == int(number.lstrip("#")) else None
+        header.append((detail or {}).get("title", title) + "\n", style="bold")
         header.append("\n OPEN ", style=f"bold {self._c('background')} on {self._c('success')}")
         header.append(f"  opened by @dlvhdr {age} ago  ·  {labels}\n", style="dim")
         header.append("\n▣ Conversation   ◉ Timeline   ◇ Related PRs", style="bold")
 
         first = Text()
-        first.append("@dlvhdr  ·  author  ·  2h\n", style="bold")
-        first.append(f"Discussion for “{title}”. ")
-        first.append("This thread captures the current context and reproduction details.\n\n", style="dim")
-        first.append("macOS 15.6  ·  Safari 18.6  ·  production", style=self._c("warning"))
         reply = Text()
-        reply.append("@musa  ·  maintainer  ·  38m\n", style="bold")
-        reply.append("Confirmed. The SameSite policy looks like the likely cause. ")
-        reply.append("I’m tracing the callback cookie now.", style="dim")
+        if detail and detail.get("comments_data"):
+            for item in detail["comments_data"][-5:]:
+                author = (item.get("user") or {}).get("login", "unknown")
+                first.append(f"@{author}  ·  {item.get('created_at', '')}\n", style="bold")
+                first.append(f"{item.get('body', '')}\n\n", style="dim")
+        elif self.app.github_snapshot is not None:
+            first.append("Open the detail to fetch issue conversation…", style="dim")
+        else:
+            first.append("@dlvhdr  ·  author  ·  2h\n", style="bold")
+            first.append(f"Discussion for “{title}”. ")
+            first.append("This thread captures the current context and reproduction details.\n\n", style="dim")
+            first.append("macOS 15.6  ·  Safari 18.6  ·  production", style=self._c("warning"))
+            reply.append("@musa  ·  maintainer  ·  38m\n", style="bold")
+            reply.append("Confirmed. The SameSite policy looks like the likely cause. ")
+            reply.append("I’m tracing the callback cookie now.", style="dim")
         right = Group(
             header,
             Text("\n"),
@@ -700,9 +727,12 @@ class MainScreen(Screen):
             ("musa/job-agent", "Python", "private", "0", "1w"),
         ]
         if self.app.github_snapshot is not None:
-            rows = self.app.github_snapshot.repo_rows()
-            if not rows:
-                rows = [(self.app.repository or "—", "—", "—", "0", "now")]
+            repo = self.app.github_snapshot.repository
+            rows = [(
+                repo.get("nameWithOwner") or self.app.repository or "—",
+                "—", repo.get("visibility", "—"),
+                str(repo.get("stargazerCount", 0)), "now",
+            )]
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(ratio=1)
@@ -729,14 +759,17 @@ class MainScreen(Screen):
         info.append("GitHub workflow dashboard and deployment toolkit.\n\n", style="dim")
         info.append("main  ↑2   clean\n", style=self._c("success"))
         info.append(f"{lang}  ·  MIT  ·  {visibility}  ·  ★ {stars}\n\n", style="dim")
-        info.append("4 pull requests   7 issues   3 releases\n")
-        info.append("CI passing   production healthy", style=self._c("success"))
-        if self.app.github_snapshot:
+        snapshot = self.app.github_snapshot
+        if snapshot is not None:
+            info.append(f"{len(snapshot.pull_requests)} pull requests   {len(snapshot.issues)} issues   {len(snapshot.releases)} releases\n")
+            info.append(f"{len(snapshot.workflows)} workflow runs   {len(snapshot.commits)} commits", style=self._c("success"))
             branches = ", ".join(
-                branch.get("name", "") for branch in self.app.github_snapshot.branches[:5]
+                branch.get("name", "") for branch in snapshot.branches[:5]
             )
             if branches:
                 info.append(f"\n\nbranches  {branches}", style="dim")
+        else:
+            info.append("Repository data is still loading…", style="dim")
         tree = Text("▾ src\n  ▾ screens\n    overview.py\n    main.py\n  ▾ widgets\n    spinner.py\n  app.py\n▸ tests\nREADME.md", style="dim")
         actions = Text()
         actions.append("read-only loading phase\n", style=self._c("warning"))
@@ -774,11 +807,18 @@ class MainScreen(Screen):
             sha = (selected_item.get("sha") or "unknown")[:7]
             message = (selected_commit.get("message") or "commit").splitlines()[0]
             author = (selected_commit.get("author") or {}).get("name") or "unknown"
+            files = selected_item.get("files") or []
+            file_text = Text("Files changed\n", style=f"bold {self._c('primary')}")
+            if files:
+                for file in files:
+                    file_text.append(f"{file.get('status', 'M'):>8}  {file.get('filename', 'unknown')}\n", style="dim")
+            else:
+                file_text.append("No file details returned by GitHub.\n", style="dim")
             right = Group(
                 Text(f"Commit {sha}\n", style=self._c("primary")),
                 Text(f"{message}\n", style="bold"),
                 Text(f"@{author}  ·  {relative_time(selected_commit.get('committer', {}).get('date'))}  ·  {self.app.repository}\n", style="dim"),
-                Panel(Text("Commit details loaded read-only from GitHub.\nNo changes are written while browsing."), border_style=self._c("border")),
+                Panel(file_text, border_style=self._c("border")),
             )
             return Group(tree, Text(f"\n  {len(snapshot_commits)} commits loaded", style="dim")), right, self._status(
                 f"Commit {selected + 1}/{len(snapshot_commits)}", "read-only", "loaded", self.app.repository or ""
@@ -895,9 +935,9 @@ class MainScreen(Screen):
                 result.append("  ·  ", style="dim")
             result.append(item, style=self._c("primary") if index == 0 else "dim")
         controls = (
-            "   [j/k] select  [enter] detail  [e] edit  [esc] done  [q] quit"
+            "   [j/k] select  [enter] detail  [n] more  [e] edit  [esc] done  [q] quit"
             if self.size.width < 110
-            else "     [j/k] select  [enter] detail  [e] edit  [esc] done  [ctrl+s] local save  [tab] section  [o] overview  [q] quit"
+            else "     [j/k] select  [enter] detail  [n] more  [e] edit  [esc] done  [ctrl+s] local save  [tab] section  [o] overview  [q] quit"
         )
         result.append(controls, style="dim")
         if self.app.data_loading:
@@ -980,6 +1020,23 @@ class MainScreen(Screen):
 
     def action_open_detail(self) -> None:
         self._show_pane("detail")
+        if self._section in {0, 1}:
+            rows = self.app.github_snapshot.pr_rows() if self._section == 0 and self.app.github_snapshot else []
+            if self._section == 1 and self.app.github_snapshot:
+                rows = self.app.github_snapshot.issue_rows()
+            if rows:
+                number = int(str(rows[min(self._selection(), len(rows) - 1)][0]).lstrip("#"))
+                self.app.begin_detail_load("pr" if self._section == 0 else "issue", number)
+
+    def action_load_more(self) -> None:
+        """Fetch the next bounded window without changing the current repository."""
+        current = int(self.app.settings.get("per_page", 30))
+        if current >= 100:
+            self.notify("Reached the 100-item fetch window", timeout=1.5)
+            return
+        self.app.settings["per_page"] = min(100, current + 30)
+        self.app.begin_data_load(force=True)
+        self.notify(f"Loading next window ({self.app.settings['per_page']} items)…", timeout=1.5)
 
     def action_focus_comment(self) -> None:
         if self._section not in {0, 1}:
