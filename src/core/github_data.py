@@ -105,6 +105,37 @@ def _author(item: dict) -> str:
     return author.get("login") or author.get("name") or "unknown"
 
 
+def _normalize_pull_request(item: dict[str, Any]) -> dict[str, Any]:
+    """Normalize REST pull-request JSON to the fields used by the UI."""
+    result = dict(item)
+    result.setdefault("headRefName", (item.get("head") or {}).get("ref", "—"))
+    result.setdefault("baseRefName", (item.get("base") or {}).get("ref", "—"))
+    result.setdefault("author", {"login": (item.get("user") or {}).get("login", "unknown")})
+    result.setdefault("updatedAt", item.get("updated_at"))
+    result.setdefault("createdAt", item.get("created_at"))
+    result.setdefault("changedFiles", item.get("changed_files", 0))
+    result.setdefault("reviewDecision", "")
+    result.setdefault("statusCheckRollup", [])
+    return result
+
+
+def _normalize_issue(item: dict[str, Any]) -> dict[str, Any]:
+    result = dict(item)
+    result.setdefault("updatedAt", item.get("updated_at"))
+    result.setdefault("createdAt", item.get("created_at"))
+    result.setdefault("author", {"login": (item.get("user") or {}).get("login", "unknown")})
+    return result
+
+
+def _normalize_workflow(item: dict[str, Any]) -> dict[str, Any]:
+    result = dict(item)
+    result.setdefault("workflowName", item.get("name", "workflow"))
+    result.setdefault("headBranch", item.get("head_branch", "—"))
+    result.setdefault("createdAt", item.get("created_at"))
+    result.setdefault("updatedAt", item.get("updated_at"))
+    return result
+
+
 @dataclass
 class GitHubSnapshot:
     repository: dict[str, Any] = field(default_factory=dict)
@@ -208,15 +239,23 @@ def load_snapshot(repository: str, *, cwd: Path | None = None, limit: int = 30, 
     cached = _snapshot_cache.get(repo)
     if cached and not force and time.monotonic() - cached[0] < ttl:
         return cached[1]
-    repository_data = _run_json(["repo", "view", repo, "--json", "nameWithOwner,url,defaultBranchRef,visibility,description,stargazerCount"], cwd=cwd)
+    repository_data = _run_json(["api", f"repos/{repo}"], cwd=cwd)
+    repository_data = {
+        **repository_data,
+        "nameWithOwner": repository_data.get("full_name", repo),
+        "url": repository_data.get("html_url"),
+        "defaultBranchRef": {"name": repository_data.get("default_branch", "main")},
+        "stargazerCount": repository_data.get("stargazers_count", 0),
+    }
     snapshot = GitHubSnapshot(repository=repository_data or {})
-    snapshot.pull_requests = _safe_query(["pr", "list", "--repo", repo, "--state", "open", "--limit", str(limit), "--json", "number,title,headRefName,baseRefName,author,updatedAt,createdAt,additions,deletions,changedFiles,commits,reviewDecision,statusCheckRollup"], cwd=cwd, default=[])
-    snapshot.issues = _safe_query(["issue", "list", "--repo", repo, "--state", "open", "--limit", str(limit), "--json", "number,title,labels,comments,updatedAt,author"], cwd=cwd, default=[])
-    snapshot.workflows = _safe_query(["run", "list", "--repo", repo, "--limit", str(limit), "--json", "databaseId,name,workflowName,headBranch,status,conclusion,createdAt,updatedAt"], cwd=cwd, default=[])
+    snapshot.pull_requests = [_normalize_pull_request(item) for item in _safe_query(["api", f"repos/{repo}/pulls?state=open&per_page={min(limit, 100)}"], cwd=cwd, default=[])]
+    snapshot.issues = [_normalize_issue(item) for item in _safe_query(["api", f"repos/{repo}/issues?state=open&per_page={min(limit, 100)}"], cwd=cwd, default=[]) if "pull_request" not in item]
+    workflow_data = _safe_query(["api", f"repos/{repo}/actions/runs?per_page={min(limit, 100)}"], cwd=cwd, default={"workflow_runs": []})
+    snapshot.workflows = [_normalize_workflow(item) for item in workflow_data.get("workflow_runs", [])]
     snapshot.deployments = _safe_query(["api", f"repos/{repo}/deployments?per_page={min(limit, 30)}"], cwd=cwd, default=[])
     snapshot.branches = _safe_query(["api", f"repos/{repo}/branches?per_page={min(limit, 30)}"], cwd=cwd, default=[])
     snapshot.commits = _safe_query(["api", f"repos/{repo}/commits?per_page={min(limit, 30)}"], cwd=cwd, default=[])
-    snapshot.releases = _safe_query(["release", "list", "--repo", repo, "--limit", str(limit), "--json", "tagName,name,isLatest,publishedAt"], cwd=cwd, default=[])
+    snapshot.releases = _safe_query(["api", f"repos/{repo}/releases?per_page={min(limit, 100)}"], cwd=cwd, default=[])
     # Repo Manager is intentionally scoped to the configured repository; avoid an
     # unnecessary owner-wide listing (and its extra rate-limit cost).
     snapshot.repositories = []

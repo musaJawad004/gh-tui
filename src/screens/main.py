@@ -274,7 +274,8 @@ class MainScreen(Screen):
         snapshot = self.app.github_snapshot
         if snapshot is not None and not self.app.data_error:
             counts = [len(snapshot.pull_requests), len(snapshot.issues), len(snapshot.workflows), 1, len(snapshot.commits)]
-            self._item_counts[self._section] = max(1, counts[self._section])
+            if counts[self._section] > 0:
+                self._item_counts[self._section] = counts[self._section]
         self.query_one("#navigator-content", Static).update(left)
         self.query_one("#navigator-analytics", Static).update(self._section_analytics())
         self.query_one("#detail-content", Static).update(right)
