@@ -152,10 +152,15 @@ class OverviewScreen(Screen):
         ("l", "goto_releases", ""),
         ("s", "goto_settings", ""),
         ("r", "refresh_dashboard", "Refresh"),
+        ("a", "mutation_palette", "Actions"),
         ("slash", "commands", "Commands"),
         ("j", "noop", ""),
         ("k", "noop", ""),
     ]
+
+    def action_mutation_palette(self) -> None:
+        from screens.mutation_palette import MutationPalette
+        self.app.push_screen(MutationPalette())
 
     def compose(self) -> ComposeResult:
         yield Static(self._masthead(), id="masthead")

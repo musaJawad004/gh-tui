@@ -263,6 +263,14 @@ def load_workflow_detail(repository: str, run_id: int, *, cwd: Path | None = Non
     return detail
 
 
+def load_commit_detail(repository: str, sha: str, *, cwd: Path | None = None) -> dict[str, Any]:
+    """Load one commit, including its complete changed-file list."""
+    repo = parse_repository_url(repository)
+    if not repo:
+        raise GhCliError("repository must be a GitHub URL or owner/name")
+    return _run_json(["api", f"repos/{repo}/commits/{sha}"], cwd=cwd)
+
+
 def load_snapshot(repository: str, *, cwd: Path | None = None, limit: int = 30, force: bool = False, ttl: float = 1800) -> GitHubSnapshot:
     """Fetch all read-only dashboard resources for one repository."""
     repo = parse_repository_url(repository)
