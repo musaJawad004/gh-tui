@@ -59,6 +59,7 @@ class GhTuiApp(App):
         self.data_loading = False
         self.data_error: str | None = None
         self.detail_data: dict | None = None
+        self.detail_kind: str | None = None
         self.detail_loading = False
         saved_theme = self.settings.get("theme")
         requested_theme = theme if theme in THEME_NAMES else saved_theme
@@ -106,8 +107,6 @@ class GhTuiApp(App):
         self.notify(f"Theme: {self.theme}", timeout=1.5)
 
     def on_mount(self) -> None:
-        from screens.main import MainScreen
-        from screens.overview import OverviewScreen
         from screens.repo_setup import RepoSetupScreen
         from screens.settings import SettingsScreen
         from screens.splash import SplashScreen
@@ -122,18 +121,21 @@ class GhTuiApp(App):
             self.push_screen(RepoSetupScreen(), self._repository_confirmed)
             return
 
-        if self._start_screen == "pull-requests":
+        if self._start_screen == "settings":
+            self.push_screen(SettingsScreen())
+        elif self._start_screen == "pull-requests":
+            from screens.main import MainScreen
             self.push_screen(MainScreen(section=0))
         elif self._start_screen == "workspace":
+            from screens.main import MainScreen
             self.push_screen(MainScreen())
-        elif self._start_screen == "settings":
-            self.push_screen(SettingsScreen())
+        elif self._start_screen == "overview":
+            from screens.overview import OverviewScreen
+            self.push_screen(OverviewScreen())
         else:
-            # Default: CLI-style boot splash -> focused terminal workspace.
-            if self._start_screen == "overview":
-                self.push_screen(OverviewScreen())
-            else:
-                self.push_screen(SplashScreen(destination=self.settings["default_screen"]))
+            # Always gate repository screens behind the animated, truthful loader.
+            destination = self.settings.get("default_screen", "overview")
+            self.push_screen(SplashScreen(destination=destination))
         self.begin_data_load()
 
     def begin_data_load(self, *, force: bool = False) -> None:
@@ -189,6 +191,7 @@ class GhTuiApp(App):
             return
         self.detail_loading = True
         self.detail_data = None
+        self.detail_kind = kind
         self.run_worker(lambda: self._load_detail(kind, number), thread=True, exclusive=False)
 
     def _load_detail(self, kind: str, number: int) -> None:

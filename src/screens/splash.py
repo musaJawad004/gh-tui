@@ -62,6 +62,7 @@ class SplashScreen(Screen):
         self._step = 0
         self._frame = 0
         self._done = False
+        self._skip_requested = False
         self._render_steps()
         self._timer = self.set_interval(0.08, self._tick)
 
@@ -87,6 +88,12 @@ class SplashScreen(Screen):
         )
         t.append("\n\n  ")
         t.append_text(indeterminate_bar(self._frame, width=36, color=colors["secondary"]))
+        if self.app.data_loading:
+            t.append("\n\n  loading live GitHub data…", style="dim")
+        elif self.app.data_error:
+            t.append("\n\n  GitHub returned an empty/error state; opening workspace", style="dim")
+        else:
+            t.append("\n\n  repository data ready", style=colors["success"])
         self.query_one("#steps", Static).update(t)
 
     def _finish(self) -> None:
@@ -104,4 +111,6 @@ class SplashScreen(Screen):
             self.app.switch_screen(OverviewScreen())
 
     def action_skip(self) -> None:
-        self._finish()
+        # Skipping only shortens the animation; it never bypasses the data gate.
+        self._step = len(STEPS)
+        self._render_steps()

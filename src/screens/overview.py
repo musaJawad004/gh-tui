@@ -310,20 +310,13 @@ class OverviewScreen(Screen):
         return table
 
     def _activity(self) -> Table:
-        rows = [
-            ("×", "error", "4m", "backend-tests workflow failed", "#9182", "workflow"),
-            ("✓", "success", "18m", "merge pull request #140 from feat/dashboard", "main", ""),
-            ("✓", "success", "38m", "update README.md", "main", ""),
-            ("!", "warning", "1h", "database migration: add user_sessions table", "#141", "develop"),
-            ("→", "success", "2h", "deploy to production", "main", "deploy"),
-            ("✓", "success", "3h", "fix payment retry logic", "#139", "feat/payments"),
-            ("✓", "success", "5h", "bump dependencies", "main", ""),
-            ("✓", "success", "6h", "feat: add usage analytics", "#138", "feat/analytics"),
-        ]
+        rows = []
         if self.app.github_snapshot is not None:
             rows = self.app.github_snapshot.activity_rows()
             if not rows:
                 rows = [("·", "muted", "now", "No recent activity", "—", "")]
+        else:
+            rows = [("·", "muted", "now", "Loading repository data…", "—", "")]
         table = _grid(1, 2, 13, 2, 3, padding=(0, 1))
         for icon, color, age, event, ref, kind in rows:
             table.add_row(
@@ -334,12 +327,7 @@ class OverviewScreen(Screen):
         return table
 
     def _pull_requests(self) -> Table:
-        rows = [
-            ("#142", "Add Google OAuth login", "feat/oauth", "2/2 ✓", "4m ago"),
-            ("#141", "Improve dashboard charts", "feat/dashboard", "6/6 ✓", "1h ago"),
-            ("#140", "Fix mobile layout issues", "fix/mobile", "6/6 ✓", "18m ago"),
-            ("#139", "Payment retry mechanism", "fix/payment", "6/6 ✓", "3h ago"),
-        ]
+        rows = []
         if self.app.github_snapshot is not None:
             rows = [
                 (number, title, branch, f"{checks} ✓", f"{age} ago")
@@ -347,6 +335,8 @@ class OverviewScreen(Screen):
             ]
             if not rows:
                 rows = [("—", "No open pull requests", "—", "0/0", "now")]
+        else:
+            rows = [("—", "Loading repository data…", "—", "0/0", "now")]
         table = _grid(6, 2, 3, padding=(0, 0))
         for number, title, branch, checks, age in rows:
             left = Text(no_wrap=True, overflow="ellipsis")
@@ -364,14 +354,7 @@ class OverviewScreen(Screen):
         return table
 
     def _workflows(self) -> Table:
-        rows = [
-            ("×", "error", "backend-tests", "4m 12s"),
-            ("✓", "success", "lint & format", "1m 03s"),
-            ("✓", "success", "e2e tests", "5m 41s"),
-            ("✓", "success", "build & package", "2m 21s"),
-            ("○", "warning", "deploy preview", "running"),
-            ("✓", "success", "security scan", "1m 34s"),
-        ]
+        rows = []
         if self.app.github_snapshot is not None:
             rows = [
                 (icon, "error" if state == "failed" else "warning" if state == "running" else "success", name, duration)
@@ -379,6 +362,8 @@ class OverviewScreen(Screen):
             ]
             if not rows:
                 rows = [("·", "muted", "No workflow runs", "—")]
+        else:
+            rows = [("·", "muted", "Loading repository data…", "—")]
         table = _grid(1, 7, 3, padding=(0, 0))
         for icon, color, name, value in rows:
             table.add_row(
@@ -388,16 +373,13 @@ class OverviewScreen(Screen):
         return table
 
     def _deployments(self) -> Table:
-        rows = [
-            ("●", "success", "production", "main", "2h ago", "✓"),
-            ("○", "success", "staging", "develop", "6h ago", "✓"),
-            ("○", "warning", "preview", "#142", "running", "•••"),
-            ("○", "warning", "preview", "#141", "12m ago", "–"),
-        ]
+        rows = []
         if self.app.github_snapshot is not None:
             rows = self.app.github_snapshot.deployment_rows()
             if not rows:
                 rows = [("·", "muted", "No deployments", "—", "now", "—")]
+        else:
+            rows = [("·", "muted", "Loading repository data…", "—", "now", "—")]
         table = _grid(1, 4, 3, 3, 2, padding=(0, 0))
         for icon, color, env, branch, age, result in rows:
             table.add_row(
