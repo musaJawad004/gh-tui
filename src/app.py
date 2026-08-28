@@ -188,8 +188,6 @@ class GhTuiApp(App):
         self.settings["repository"] = value
         self.settings["repository_cwd"] = str(Path.cwd().resolve())
         self.persist_settings()
-        if self.screen:
-            self.pop_screen()
         self.begin_data_load()
 
     def begin_detail_load(self, kind: str, number: int | str) -> None:

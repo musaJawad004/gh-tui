@@ -147,6 +147,7 @@ class GitHubSnapshot:
     commits: list[dict[str, Any]] = field(default_factory=list)
     releases: list[dict[str, Any]] = field(default_factory=list)
     repositories: list[dict[str, Any]] = field(default_factory=list)
+    events: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def name(self) -> str:
@@ -201,22 +202,36 @@ class GitHubSnapshot:
         return self.commits
 
     def activity_rows(self) -> list[tuple]:
-        """Normalize fetched resources into the overview activity table shape."""
+        """Normalize GitHub events into a truthful, bounded recent-activity feed."""
         rows: list[tuple] = []
-        for item in self.workflows[:2]:
-            conclusion = (item.get("conclusion") or item.get("status") or "queued").lower()
-            rows.append((
-                "✓" if conclusion == "success" else "×" if conclusion in {"failure", "cancelled"} else "○",
-                "success" if conclusion == "success" else "error" if conclusion in {"failure", "cancelled"} else "warning",
-                relative_time(item.get("updatedAt") or item.get("createdAt")),
-                f"{item.get('name') or item.get('workflowName') or 'workflow'} workflow {conclusion}",
-                str(item.get("databaseId", "run")), "workflow",
-            ))
-        for item in self.pull_requests[:3]:
-            number = item.get("number", "?")
-            rows.append(("✓", "success", relative_time(item.get("updatedAt")), item.get("title", "pull request"), f"#{number}", "pull request"))
-        for item in self.issues[:2]:
-            rows.append(("!", "warning", relative_time(item.get("updatedAt")), item.get("title", "issue"), f"#{item.get('number', '?')}", "issue"))
+        cutoff = datetime.now(UTC).timestamp() - 48 * 3600
+        for item in self.events:
+            stamp = item.get("created_at") or item.get("createdAt")
+            try:
+                if stamp and datetime.fromisoformat(stamp).timestamp() < cutoff:
+                    continue
+            except ValueError:
+                continue
+            event_type = item.get("type", "")
+            payload = item.get("payload") or {}
+            repo = (item.get("repo") or {}).get("name", "")
+            ref = repo.rsplit("/", 1)[-1] if repo else "—"
+            if event_type == "PushEvent":
+                count = len(payload.get("commits") or [])
+                rows.append(("✓", "success", relative_time(stamp), f"{count or 1} commit{'s' if count != 1 else ''} pushed", ref, "commit"))
+            elif event_type == "PullRequestEvent":
+                pr = payload.get("pull_request") or {}
+                action = payload.get("action", "updated")
+                rows.append(("✓", "success", relative_time(stamp), f"pull request {action}: {pr.get('title', 'untitled')}", f"#{pr.get('number', '?')}", "pull request"))
+            elif event_type == "IssuesEvent":
+                issue = payload.get("issue") or {}
+                action = payload.get("action", "updated")
+                rows.append(("!", "warning", relative_time(stamp), f"issue {action}: {issue.get('title', 'untitled')}", f"#{issue.get('number', '?')}", "issue"))
+            elif event_type in {"WorkflowRunEvent", "WorkflowDispatchEvent"}:
+                action = payload.get("action", "updated")
+                rows.append(("○", "warning", relative_time(stamp), f"workflow {action}", ref, "workflow"))
+            elif event_type == "DeploymentEvent":
+                rows.append(("→", "success", relative_time(stamp), "deployment created", ref, "deploy"))
         return rows
 
 
@@ -296,6 +311,7 @@ def load_snapshot(repository: str, *, cwd: Path | None = None, limit: int = 30, 
     snapshot.branches = _safe_query(["api", f"repos/{repo}/branches?per_page={min(limit, 30)}"], cwd=cwd, default=[])
     snapshot.commits = _safe_query(["api", f"repos/{repo}/commits?per_page={min(limit, 30)}"], cwd=cwd, default=[])
     snapshot.releases = _safe_query(["api", f"repos/{repo}/releases?per_page={min(limit, 100)}"], cwd=cwd, default=[])
+    snapshot.events = _safe_query(["api", f"repos/{repo}/events?per_page=100"], cwd=cwd, default=[])
     # Repo Manager is intentionally scoped to the configured repository; avoid an
     # unnecessary owner-wide listing (and its extra rate-limit cost).
     snapshot.repositories = []
