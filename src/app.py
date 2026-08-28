@@ -54,7 +54,12 @@ class GhTuiApp(App):
         self._drafts_path = drafts_path
         self.settings = load_settings(config_path)
         self.comment_drafts = load_drafts(drafts_path)
-        self.repository = parse_repository_url(self.settings.get("repository", ""))
+        saved_cwd = self.settings.get("repository_cwd", "")
+        self.repository = (
+            parse_repository_url(self.settings.get("repository", ""))
+            if saved_cwd and Path(saved_cwd).expanduser().resolve() == Path.cwd().resolve()
+            else None
+        )
         self.github_snapshot = None
         self.data_loading = False
         self.data_error: str | None = None
@@ -111,11 +116,12 @@ class GhTuiApp(App):
         from screens.settings import SettingsScreen
         from screens.splash import SplashScreen
 
-        if not self.repository:
-            self.repository = detect_local_repository(Path.cwd())
-            if self.repository:
-                self.settings["repository"] = self.repository
-                self.persist_settings()
+        local_repository = detect_local_repository(Path.cwd())
+        if local_repository:
+            self.repository = local_repository
+            self.settings["repository"] = local_repository
+            self.settings["repository_cwd"] = str(Path.cwd().resolve())
+            self.persist_settings()
 
         if not self.repository:
             self.push_screen(RepoSetupScreen(), self._repository_confirmed)
@@ -180,6 +186,7 @@ class GhTuiApp(App):
             return
         self.repository = value
         self.settings["repository"] = value
+        self.settings["repository_cwd"] = str(Path.cwd().resolve())
         self.persist_settings()
         if self.screen:
             self.pop_screen()
