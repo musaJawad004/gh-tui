@@ -21,11 +21,9 @@ from core.github_data import relative_time
 from themes.palettes import active_colors
 from widgets.spinner import indeterminate_bar, inline_loader, spinner_frame
 from widgets.terminal_charts import (
-    contribution_calendar,
     donut_chart,
     horizontal_bars,
     line_plot,
-    vertical_bars,
 )
 
 SECTIONS = ["Pull Requests", "Issues", "CI / CD", "Repo Manager", "Commits"]
@@ -430,77 +428,16 @@ class MainScreen(Screen):
             if self._section == 3:
                 return Panel(Text(f"{len(snapshot.branches)} branches\n{len(snapshot.repositories)} repositories\n{len(snapshot.releases)} releases", style=self._c("primary")), title="repository activity", border_style=self._c("border"), padding=(1, 2))
             return Panel(Text(f"{len(snapshot.commits)} commits fetched\nread-only activity", style=self._c("success")), title="commit contributions", border_style=self._c("border"), padding=(1, 2))
-        navigator_ratio = 0.36 if self.size.width >= 180 and self.size.height >= 50 else 0.40
-        width = max(30, int(self.size.width * navigator_ratio) - 6)
-        if self._section == 0:
-            return self._analytics(
-                ("merge rate", (42, 56, 51, 68, 72, 81, 76), "76% · last 7 days", "success"),
-                ("pull request state", (4, 18, 3), "4 open · 18 merged · 3 closed", "primary"),
-            )
-        if self._section == 1:
-            chart = donut_chart(
-                (7, 24, 5),
-                "36 tracked issues",
-                (self._c("warning"), self._c("success"), self._c("error")),
-                width=min(31, width - 4),
-                height=11,
-                labels=("open", "closed", "blocked"),
-            )
-            centered = Table.grid(expand=True)
-            centered.add_column(justify="center")
-            centered.add_row(chart)
-            return Panel(centered, title="issue distribution", border_style=self._c("border"))
-        if self._section == 2:
-            return Panel(
-                horizontal_bars(
-                    ("passed", "failed", "running"),
-                    (19, 3, 1),
-                    (self._c("success"), self._c("error"), self._c("warning")),
-                    "23 workflow runs · 95% success",
-                    width=width - 4,
-                    row_spacing=1,
-                ),
-                title="workflow outcomes",
-                border_style=self._c("border"),
-                padding=(0, 1),
-            )
-        if self._section == 3:
-            return Panel(
-                vertical_bars(
-                    (4, 7, 3, 9, 12, 8, 14),
-                    ("M", "T", "W", "T", "F", "S", "S"),
-                    "57 commits · repository activity",
-                    self._c("primary"),
-                    width=width - 4,
-                    height=6,
-                ),
-                title="repository activity",
-                border_style=self._c("border"),
-                padding=(0, 1),
-            )
-        return Panel(
-            contribution_calendar(
-                "57 commits · main ↑2",
-                self._c("success"),
-                width=width - 4,
-                height=9,
-            ),
-            title="commit contributions",
-            border_style=self._c("border"),
-            padding=(0, 1),
-        )
+        return Panel(Text("Waiting for repository data…", style="dim"), title="analytics", border_style=self._c("border"))
 
     def _pull_requests(self):
-        rows = [
-            ("#142", "Add Google OAuth login", "feat/oauth", "✓", "2/2", "+391  -4", "4m"),
-            ("#141", "Improve dashboard charts", "feat/dashboard", "✓", "6/6", "+120  -18", "1h"),
-            ("#140", "Fix mobile layout issues", "fix/mobile", "✓", "6/6", "+48  -12", "18m"),
-            ("#139", "Payment retry mechanism", "fix/payment", "✓", "6/6", "+92  -31", "3h"),
-        ]
+        rows = []
         if self.app.github_snapshot is not None:
             rows = self.app.github_snapshot.pr_rows()
             if not rows:
                 rows = [("—", "No open pull requests", "—", "·", "0/0", "+0  -0", "now")]
+        else:
+            rows = [("—", "Loading repository data…", "—", "·", "0/0", "+0  -0", "now")]
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=6)
@@ -534,7 +471,9 @@ class MainScreen(Screen):
         number, title, branch, _ci, checks, changes, age = rows[selected]
         meta = Text()
         meta.append(f"{self.app.repository or 'repository'}  ·  {number}\n", style=self._c("primary"))
-        detail = self.app.detail_data if self.app.detail_data and self.app.detail_data.get("number") == int(number.lstrip("#")) else None
+        detail = None
+        if number.startswith("#") and self.app.detail_kind == "pr" and self.app.detail_data:
+            detail = self.app.detail_data if self.app.detail_data.get("number") == int(number[1:]) else None
         if self.app.detail_loading:
             meta.append("Loading pull request details…\n", style=self._c("primary"))
         meta.append((detail or {}).get("title", title) + "\n", style="bold")
@@ -566,9 +505,7 @@ class MainScreen(Screen):
         elif self.app.github_snapshot is not None:
             comment.append("Open the detail to fetch review activity…", style="dim")
         else:
-            comment.append("@sarah  ·  reviewer  ·  2m\n", style="bold")
-            comment.append("The callback flow looks clean. One small question about token expiry, ")
-            comment.append("otherwise this is ready to merge.", style="dim")
+            comment.append("No review activity loaded.", style="dim")
 
         right = Group(
             meta,
@@ -582,17 +519,13 @@ class MainScreen(Screen):
         )
 
     def _issues(self):
-        rows = [
-            ("#87", "OAuth redirect fails on Safari", "bug · auth", "4", "2h"),
-            ("#85", "Dark theme contrast on tables", "ui", "1", "5h"),
-            ("#84", "Add pagination to PR list", "enhancement", "0", "8h"),
-            ("#80", "Document the config file", "docs · good first issue", "3", "1d"),
-            ("#78", "Flaky E2E on checkout step", "bug · ci", "6", "1d"),
-        ]
+        rows = []
         if self.app.github_snapshot is not None:
             rows = self.app.github_snapshot.issue_rows()
             if not rows:
                 rows = [("—", "No open issues", "—", "0", "now")]
+        else:
+            rows = [("—", "Loading repository data…", "—", "0", "now")]
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=6)
@@ -614,7 +547,9 @@ class MainScreen(Screen):
         number, title, labels, comments, age = rows[selected]
         header = Text()
         header.append(f"{self.app.repository or 'repository'}  ·  Issue {number}\n", style=self._c("primary"))
-        detail = self.app.detail_data if self.app.detail_data and self.app.detail_data.get("number") == int(number.lstrip("#")) else None
+        detail = None
+        if number.startswith("#") and self.app.detail_kind == "issue" and self.app.detail_data:
+            detail = self.app.detail_data if self.app.detail_data.get("number") == int(number[1:]) else None
         header.append((detail or {}).get("title", title) + "\n", style="bold")
         header.append("\n OPEN ", style=f"bold {self._c('background')} on {self._c('success')}")
         header.append(f"  opened by @dlvhdr {age} ago  ·  {labels}\n", style="dim")
@@ -630,13 +565,7 @@ class MainScreen(Screen):
         elif self.app.github_snapshot is not None:
             first.append("Open the detail to fetch issue conversation…", style="dim")
         else:
-            first.append("@dlvhdr  ·  author  ·  2h\n", style="bold")
-            first.append(f"Discussion for “{title}”. ")
-            first.append("This thread captures the current context and reproduction details.\n\n", style="dim")
-            first.append("macOS 15.6  ·  Safari 18.6  ·  production", style=self._c("warning"))
-            reply.append("@musa  ·  maintainer  ·  38m\n", style="bold")
-            reply.append("Confirmed. The SameSite policy looks like the likely cause. ")
-            reply.append("I’m tracing the callback cookie now.", style="dim")
+            first.append("No issue conversation loaded.", style="dim")
         right = Group(
             header,
             Text("\n"),
@@ -651,18 +580,13 @@ class MainScreen(Screen):
         )
 
     def _pipelines(self):
-        rows = [
-            ("×", "backend-tests", "main", "failed", "4m 12s", "4m"),
-            ("✓", "lint & format", "main", "passed", "1m 03s", "6m"),
-            ("✓", "e2e tests", "feat/oauth", "passed", "5m 41s", "12m"),
-            ("✓", "build & package", "main", "passed", "2m 21s", "16m"),
-            ("○", "deploy preview", "feat/oauth", "running", "3m 11s", "now"),
-            ("✓", "security scan", "main", "passed", "1m 34s", "18m"),
-        ]
+        rows = []
         if self.app.github_snapshot is not None:
             rows = self.app.github_snapshot.workflow_rows()
             if not rows:
                 rows = [("·", "No workflow runs", "—", "queued", "—", "now")]
+        else:
+            rows = [("·", "Loading repository data…", "—", "queued", "—", "now")]
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(width=3)
@@ -728,13 +652,7 @@ class MainScreen(Screen):
         )
 
     def _repositories(self):
-        rows = [
-            ("musa/my-app", "Python", "public", "42", "2h"),
-            ("musa/gh-tui", "Python", "public", "128", "1d"),
-            ("musa/portfolio", "TypeScript", "public", "17", "3d"),
-            ("musa/emberflow", "Go", "public", "64", "5d"),
-            ("musa/job-agent", "Python", "private", "0", "1w"),
-        ]
+        rows = []
         if self.app.github_snapshot is not None:
             repo = self.app.github_snapshot.repository
             rows = [(
@@ -742,6 +660,8 @@ class MainScreen(Screen):
                 "—", repo.get("visibility", "—"),
                 str(repo.get("stargazerCount", 0)), "now",
             )]
+        else:
+            rows = [(self.app.repository or "repository", "—", "—", "0", "now")]
         selected = min(self._selection(), len(rows) - 1)
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(ratio=1)
@@ -796,6 +716,10 @@ class MainScreen(Screen):
 
     def _commits(self):
         snapshot_commits = self.app.github_snapshot.commit_rows() if self.app.github_snapshot else []
+        if not snapshot_commits:
+            message = "Loading repository data…" if self.app.github_snapshot is None else "No commits returned by GitHub."
+            empty = Panel(Text(message, style="dim"), title="commits", border_style=self._c("border"))
+            return empty, Panel(Text("Select a commit after data loads.", style="dim"), title="commit detail", border_style=self._c("border")), self._status("Commit 0/0", "read-only", "empty", self.app.repository or "")
         if snapshot_commits:
             selected = min(self._selection(), len(snapshot_commits) - 1)
             tree = Text()
@@ -1048,8 +972,9 @@ class MainScreen(Screen):
             if self._section == 1 and self.app.github_snapshot:
                 rows = self.app.github_snapshot.issue_rows()
             if rows:
-                number = int(str(rows[min(self._selection(), len(rows) - 1)][0]).lstrip("#"))
-                self.app.begin_detail_load("pr" if self._section == 0 else "issue", number)
+                raw_number = str(rows[min(self._selection(), len(rows) - 1)][0]).lstrip("#")
+                if raw_number.isdigit():
+                    self.app.begin_detail_load("pr" if self._section == 0 else "issue", int(raw_number))
 
     def action_mutation_palette(self) -> None:
         from screens.mutation_palette import MutationPalette
