@@ -21,6 +21,7 @@ DEFAULT_SETTINGS: dict = {
     "default_owner": "musaJawad004",
     "base_branch": "main",
     "repository": "",
+    "repository_cwd": "",
     "pr_sections": [
         {"title": "My Pull Requests", "filters": "is:open author:@me"},
         {"title": "Needs My Review", "filters": "is:open review-requested:@me"},
