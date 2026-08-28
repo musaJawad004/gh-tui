@@ -166,6 +166,7 @@ class MainScreen(Screen):
         ("down", "selection_down", ""),
         ("up", "selection_up", ""),
         ("enter", "open_detail", "Open"),
+        ("a", "mutation_palette", "Actions"),
         ("n", "load_more", "Load more"),
         ("e", "focus_comment", "Comment"),
         ("escape", "back_to_list", "Back"),
@@ -815,13 +816,15 @@ class MainScreen(Screen):
             sha = (selected_item.get("sha") or "unknown")[:7]
             message = (selected_commit.get("message") or "commit").splitlines()[0]
             author = (selected_commit.get("author") or {}).get("name") or "unknown"
-            files = selected_item.get("files") or []
+            detail = self.app.detail_data or {}
+            detail_sha = str(detail.get("sha") or "")
+            files = (detail.get("files") if detail_sha == str(selected_item.get("sha") or "") else None) or selected_item.get("files") or []
             file_text = Text("Files changed\n", style=f"bold {self._c('primary')}")
             if files:
                 for file in files:
                     file_text.append(f"{file.get('status', 'M'):>8}  {file.get('filename', 'unknown')}\n", style="dim")
             else:
-                file_text.append("No file details returned by GitHub.\n", style="dim")
+                file_text.append("Open the commit to load changed files…\n", style="dim")
             right = Group(
                 Text(f"Commit {sha}\n", style=self._c("primary")),
                 Text(f"{message}\n", style="bold"),
@@ -1034,6 +1037,12 @@ class MainScreen(Screen):
                 run_id = rows[min(self._selection(), len(rows) - 1)].get("databaseId") or rows[min(self._selection(), len(rows) - 1)].get("id")
                 if run_id:
                     self.app.begin_detail_load("workflow", int(run_id))
+        if self._section == 4 and self.app.github_snapshot:
+            rows = self.app.github_snapshot.commits
+            if rows:
+                sha = rows[min(self._selection(), len(rows) - 1)].get("sha")
+                if sha:
+                    self.app.begin_detail_load("commit", str(sha))
         if self._section in {0, 1}:
             rows = self.app.github_snapshot.pr_rows() if self._section == 0 and self.app.github_snapshot else []
             if self._section == 1 and self.app.github_snapshot:
@@ -1041,6 +1050,10 @@ class MainScreen(Screen):
             if rows:
                 number = int(str(rows[min(self._selection(), len(rows) - 1)][0]).lstrip("#"))
                 self.app.begin_detail_load("pr" if self._section == 0 else "issue", number)
+
+    def action_mutation_palette(self) -> None:
+        from screens.mutation_palette import MutationPalette
+        self.app.push_screen(MutationPalette())
 
     def action_load_more(self) -> None:
         """Fetch the next bounded window without changing the current repository."""

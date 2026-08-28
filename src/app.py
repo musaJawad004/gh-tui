@@ -17,6 +17,7 @@ from core.github_data import (
     GhCliError,
     GitHubSnapshot,
     detect_local_repository,
+    load_commit_detail,
     load_issue_detail,
     load_pull_request_detail,
     load_snapshot,
@@ -182,7 +183,7 @@ class GhTuiApp(App):
             self.pop_screen()
         self.begin_data_load()
 
-    def begin_detail_load(self, kind: str, number: int) -> None:
+    def begin_detail_load(self, kind: str, number: int | str) -> None:
         """Fetch one PR/issue detail only when the user opens it."""
         if self.detail_loading or not self.repository:
             return
@@ -192,7 +193,7 @@ class GhTuiApp(App):
 
     def _load_detail(self, kind: str, number: int) -> None:
         try:
-            loader = {"pr": load_pull_request_detail, "issue": load_issue_detail, "workflow": load_workflow_detail}[kind]
+            loader = {"pr": load_pull_request_detail, "issue": load_issue_detail, "workflow": load_workflow_detail, "commit": load_commit_detail}[kind]
             detail = loader(self.repository, number, cwd=Path.cwd())
         except GhCliError as exc:
             self.call_from_thread(self._detail_failed, str(exc))
